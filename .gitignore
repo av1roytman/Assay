@@ -1,0 +1,23 @@
+node_modules/
+out/
+dist/
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+*.log
+
+# Local machine CA bundle (exported from Windows root store; machine-specific, absolute path)
+certs/
+
+# Local MCP config — machine-specific absolute paths + personal user-agent (copy .mcp.json.example)
+.mcp.json
+
+# Secrets / local-only
+*.pem
+.env
+.env.*
+.assay/
+
+# Stray temp files that can land in the repo root
+*AppDataLocalTemp*.txt

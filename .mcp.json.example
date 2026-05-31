@@ -1,0 +1,28 @@
+{
+  "_comment": "Copy to .mcp.json and fill in absolute paths. The *_CA_BUNDLE / SSL_CERT_FILE vars are only needed on machines whose antivirus/proxy intercepts TLS (see CLAUDE.md Environment gotchas); on a normal machine you can drop them.",
+  "mcpServers": {
+    "yfinance": {
+      "command": "uvx",
+      "args": ["--system-certs", "yfmcp@latest"],
+      "env": {
+        "UV_SYSTEM_CERTS": "true",
+        "UV_LINK_MODE": "copy",
+        "SSL_CERT_FILE": "<ABSOLUTE_PATH_TO_REPO>/certs/windows-ca-bundle.pem",
+        "REQUESTS_CA_BUNDLE": "<ABSOLUTE_PATH_TO_REPO>/certs/windows-ca-bundle.pem",
+        "CURL_CA_BUNDLE": "<ABSOLUTE_PATH_TO_REPO>/certs/windows-ca-bundle.pem"
+      }
+    },
+    "sec-edgar": {
+      "command": "uvx",
+      "args": ["--system-certs", "sec-edgar-mcp@latest"],
+      "env": {
+        "UV_SYSTEM_CERTS": "true",
+        "UV_LINK_MODE": "copy",
+        "SEC_EDGAR_USER_AGENT": "Your Name (you@example.com)",
+        "SSL_CERT_FILE": "<ABSOLUTE_PATH_TO_REPO>/certs/windows-ca-bundle.pem",
+        "REQUESTS_CA_BUNDLE": "<ABSOLUTE_PATH_TO_REPO>/certs/windows-ca-bundle.pem",
+        "CURL_CA_BUNDLE": "<ABSOLUTE_PATH_TO_REPO>/certs/windows-ca-bundle.pem"
+      }
+    }
+  }
+}
