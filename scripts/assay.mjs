@@ -99,6 +99,13 @@ if (cmd === 'health') {
     process.exit(1)
   }
   console.log(await post('/research', { ticker }))
+} else if (cmd === 'data') {
+  const ticker = rest[0]
+  if (!ticker) {
+    console.error('usage: data <TICKER>')
+    process.exit(1)
+  }
+  console.log(await post('/research-data', { ticker }))
 } else if (cmd === 'panel') {
   const ticker = rest[0]
   const type = rest[1]

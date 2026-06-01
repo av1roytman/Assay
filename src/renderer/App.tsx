@@ -73,11 +73,23 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
       .catch(() => setFundamentals(null))
   }, [ticker])
 
+  // Seed from any persisted panels (the last dossier) so the window isn't blank
+  // on reopen; live pushes below overwrite them once Claude finishes a fresh pass.
+  useEffect(() => {
+    let cancelled = false
+    void window.api.getPanels(ticker).then((stored) => {
+      if (!cancelled) setPanels((prev) => mergePanels(prev, stored))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [ticker])
+
   useEffect(
     () =>
       window.api.onPanel((p) => {
         if (p.ticker.toUpperCase() === ticker.toUpperCase()) {
-          setPanels((prev) => ({ ...prev, [p.type]: p }))
+          setPanels((prev) => mergePanels(prev, [p]))
         }
       }),
     [ticker]
@@ -87,13 +99,13 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
     <div className="flex h-full flex-col">
       <Header ticker={ticker} quote={quote} />
       <div className="grid flex-1 auto-rows-min gap-4 overflow-auto p-4 lg:grid-cols-2">
-        <Panel title="Price">
+        <Panel title="Price" className="flex flex-col">
           {bars === null ? (
             <Loading />
           ) : bars.length === 0 ? (
             <Empty msg="No price history" />
           ) : (
-            <ChartPanel bars={bars} />
+            <ChartPanel bars={bars} symbol={ticker} />
           )}
         </Panel>
         <Panel title="Key stats">
@@ -104,6 +116,20 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
       </div>
     </div>
   )
+}
+
+// Keep the newest version per panel type (live pushes carry a fresh savedAt and
+// thus win over stored ones; a late stored load can't clobber a fresh push).
+function mergePanels(
+  prev: Record<string, PushPanel>,
+  incoming: PushPanel[]
+): Record<string, PushPanel> {
+  const next = { ...prev }
+  for (const p of incoming) {
+    const existing = next[p.type]
+    if (!existing || (p.savedAt ?? 0) >= (existing.savedAt ?? 0)) next[p.type] = p
+  }
+  return next
 }
 
 function Header({ ticker, quote }: { ticker: string; quote: StockQuote | null }): JSX.Element {
@@ -125,10 +151,25 @@ function Header({ ticker, quote }: { ticker: string; quote: StockQuote | null })
   )
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+function Panel({
+  title,
+  meta,
+  className,
+  children
+}: {
+  title: string
+  meta?: ReactNode
+  className?: string
+  children: ReactNode
+}): JSX.Element {
   return (
-    <section className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-      <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">{title}</h2>
+    <section
+      className={`rounded-lg border border-zinc-800 bg-zinc-900/40 p-4${className ? ` ${className}` : ''}`}
+    >
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500">{title}</h2>
+        {meta && <span className="shrink-0 text-[10px] tabular-nums text-zinc-600">{meta}</span>}
+      </div>
       {children}
     </section>
   )
@@ -145,7 +186,10 @@ const CALL_STYLES: Record<AnalystCall, { label: string; cls: string }> = {
 function RecommendationCard({ panel }: { panel: PushPanel | undefined }): JSX.Element {
   const data = panel?.data as RecommendationData | undefined
   return (
-    <Panel title={panel?.title ?? 'Recommendation'}>
+    <Panel
+      title={panel?.title ?? 'Recommendation'}
+      meta={panel?.savedAt ? `researched ${fmtStamp(panel.savedAt)}` : undefined}
+    >
       {data ? <Recommendation data={data} /> : <Loading label="Waiting for Claude…" />}
     </Panel>
   )
@@ -269,7 +313,10 @@ function TargetBar({ targets }: { targets: PriceTargets }): JSX.Element {
 function SecSummaryCard({ panel }: { panel: PushPanel | undefined }): JSX.Element {
   const data = panel?.data as SecSummaryData | undefined
   return (
-    <Panel title={panel?.title ?? 'SEC Filing Summary'}>
+    <Panel
+      title={panel?.title ?? 'SEC Filing Summary'}
+      meta={panel?.savedAt ? `researched ${fmtStamp(panel.savedAt)}` : undefined}
+    >
       {data ? <SecSummary data={data} /> : <Loading label="Waiting for Claude…" />}
     </Panel>
   )
@@ -402,8 +449,17 @@ function deriveStats(quote: StockQuote | null, bars: DailyBar[]): DerivedStats |
   const lo52 = Math.min(...window52.map((b) => b.low))
   const ma50 = n >= 50 ? avg(closes.slice(-50)) : undefined
   const ma200 = n >= 200 ? avg(closes.slice(-200)) : undefined
-  const ret = (k: number): number | undefined =>
-    n > k ? ((price - bars[n - 1 - k].close) / bars[n - 1 - k].close) * 100 : undefined
+  // Calendar-based return: base = the first close on/after `days` calendar days
+  // before the last bar — the same convention as the chart's range deltas, so
+  // the two panels agree. Returns undefined when history doesn't span the window.
+  const lastMs = Date.parse(bars[n - 1].time)
+  const oldestMs = Date.parse(bars[0].time)
+  const ret = (days: number): number | undefined => {
+    const cutoff = lastMs - days * 86_400_000
+    if (oldestMs > cutoff) return undefined
+    const base = bars.find((b) => Date.parse(b.time) >= cutoff)
+    return base && base.close ? ((price - base.close) / base.close) * 100 : undefined
+  }
   const vols = bars.map((b) => b.volume).filter((v) => v > 0)
 
   return {
@@ -419,10 +475,10 @@ function deriveStats(quote: StockQuote | null, bars: DailyBar[]): DerivedStats |
     fromLow: ((price - lo52) / lo52) * 100,
     vs50: ma50 ? ((price - ma50) / ma50) * 100 : undefined,
     vs200: ma200 ? ((price - ma200) / ma200) * 100 : undefined,
-    ret1m: ret(21),
-    ret3m: ret(63),
-    ret6m: ret(126),
-    ret1y: ret(252),
+    ret1m: ret(30),
+    ret3m: ret(90),
+    ret6m: ret(180),
+    ret1y: ret(365),
     volume: quote?.volume ?? bars[n - 1].volume,
     avgVol30: vols.length ? avg(vols.slice(-30)) : undefined
   }
@@ -642,4 +698,14 @@ function fmtVol(n: number): string {
 
 function pctStr(n: number): string {
   return (n >= 0 ? '+' : '') + n.toFixed(1) + '%'
+}
+
+function fmtStamp(ts: number): string {
+  return new Date(ts).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
 }

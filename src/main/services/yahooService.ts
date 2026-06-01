@@ -10,7 +10,7 @@
 // omits the valuation block) rather than leaving the renderer stuck on "Loading…".
 
 import { net } from 'electron'
-import type { Fundamentals } from '../../shared/types'
+import type { DailyBar, IntradayBar, Fundamentals, YahooResearch } from '../../shared/types'
 
 const CRUMB_URL = 'https://query1.finance.yahoo.com/v1/test/getcrumb'
 const COOKIE_URL = 'https://fc.yahoo.com'
@@ -84,6 +84,210 @@ function parse(json: unknown): Fundamentals | null {
     eps: rawNum(ks.trailingEps),
     dividendYield: divYield != null ? divYield * 100 : undefined,
     beta: rawNum(sd.beta)
+  }
+}
+
+// ── Richer research bundle (for the /research skill's qualitative panels) ─────
+// Same crumb flow, more modules, but we extract only the ~30 fields Claude needs
+// for the recommendation + sec-summary panels — a fraction of the yfinance MCP
+// blob's size (no officers, governance scores, address, etc.).
+
+const RESEARCH_MODULES = 'assetProfile,price,summaryDetail,defaultKeyStatistics,financialData'
+
+function strVal(node: unknown): string | undefined {
+  return typeof node === 'string' && node.trim() ? node.trim() : undefined
+}
+
+function parseResearch(json: unknown): YahooResearch | null {
+  const r = (json as QuoteSummaryResponse).quoteSummary?.result?.[0]
+  if (!r) return null
+  const ap = r.assetProfile ?? {}
+  const pr = r.price ?? {}
+  const sd = r.summaryDetail ?? {}
+  const ks = r.defaultKeyStatistics ?? {}
+  const fd = r.financialData ?? {}
+  const divYield = rawNum(sd.dividendYield)
+  return {
+    business: strVal(ap.longBusinessSummary),
+    sector: strVal(ap.sector),
+    industry: strVal(ap.industry),
+    price: rawNum(fd.currentPrice) ?? rawNum(pr.regularMarketPrice),
+    marketCap: rawNum(pr.marketCap) ?? rawNum(sd.marketCap),
+    trailingPE: rawNum(sd.trailingPE),
+    forwardPE: rawNum(sd.forwardPE) ?? rawNum(ks.forwardPE),
+    pegRatio: rawNum(ks.pegRatio),
+    priceToSales: rawNum(sd.priceToSalesTrailing12Months),
+    priceToBook: rawNum(ks.priceToBook),
+    beta: rawNum(sd.beta),
+    fiftyTwoWeekLow: rawNum(sd.fiftyTwoWeekLow),
+    fiftyTwoWeekHigh: rawNum(sd.fiftyTwoWeekHigh),
+    fiftyDayAverage: rawNum(sd.fiftyDayAverage),
+    twoHundredDayAverage: rawNum(sd.twoHundredDayAverage),
+    trailingEps: rawNum(ks.trailingEps),
+    forwardEps: rawNum(ks.forwardEps),
+    totalRevenue: rawNum(fd.totalRevenue),
+    revenueGrowth: rawNum(fd.revenueGrowth),
+    earningsGrowth: rawNum(fd.earningsGrowth),
+    grossMargins: rawNum(fd.grossMargins),
+    operatingMargins: rawNum(fd.operatingMargins),
+    profitMargins: rawNum(fd.profitMargins),
+    returnOnEquity: rawNum(fd.returnOnEquity),
+    freeCashflow: rawNum(fd.freeCashflow),
+    operatingCashflow: rawNum(fd.operatingCashflow),
+    totalCash: rawNum(fd.totalCash),
+    totalDebt: rawNum(fd.totalDebt),
+    dividendYield: divYield != null ? divYield * 100 : undefined,
+    analyst: {
+      rating: strVal(fd.recommendationKey),
+      score: rawNum(fd.recommendationMean),
+      count: rawNum(fd.numberOfAnalystOpinions),
+      targetLow: rawNum(fd.targetLowPrice),
+      targetMean: rawNum(fd.targetMeanPrice),
+      targetMedian: rawNum(fd.targetMedianPrice),
+      targetHigh: rawNum(fd.targetHighPrice)
+    }
+  }
+}
+
+export async function getResearchData(symbol: string): Promise<YahooResearch | null> {
+  const sym = encodeURIComponent(symbol.trim().toUpperCase())
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const c = await ensureCrumb()
+    if (!c) return null
+    const url = `${SUMMARY_URL}/${sym}?modules=${RESEARCH_MODULES}&crumb=${encodeURIComponent(c)}`
+    const r = await fetchText(url)
+    if (!r) return null
+    if (r.status === 401 || r.status === 403) {
+      crumb = null // stale crumb — refresh and retry
+      continue
+    }
+    if (!r.ok) {
+      console.warn('[yahoo] research status', r.status)
+      return null
+    }
+    try {
+      const data = parseResearch(JSON.parse(r.text))
+      console.log('[yahoo] research for', sym, '->', data ? 'ok' : 'empty')
+      return data
+    } catch (e) {
+      console.warn('[yahoo] research parse error:', e instanceof Error ? e.message : e)
+      return null
+    }
+  }
+  return null
+}
+
+// ── Daily price history (for the chart panel) ────────────────────────────────
+// Yahoo's public v8 chart endpoint — no crumb needed. Replaces Stooq's history
+// download, which now requires an API key. We request the full daily history via
+// period1=0..now — NOT range=max, which silently downsamples to ~monthly bars.
+// Key stats only ever uses the recent tail.
+const CHART_URL = 'https://query1.finance.yahoo.com/v8/finance/chart'
+
+interface ChartResponse {
+  chart?: {
+    result?: Array<{
+      timestamp?: number[]
+      indicators?: {
+        quote?: Array<{
+          open?: (number | null)[]
+          high?: (number | null)[]
+          low?: (number | null)[]
+          close?: (number | null)[]
+          volume?: (number | null)[]
+        }>
+      }
+    }>
+  }
+}
+
+function parseChart(json: unknown): DailyBar[] {
+  const res = (json as ChartResponse).chart?.result?.[0]
+  const ts = res?.timestamp
+  const q = res?.indicators?.quote?.[0]
+  if (!ts || !q) return []
+  const bars: DailyBar[] = []
+  for (let i = 0; i < ts.length; i++) {
+    const open = q.open?.[i]
+    const high = q.high?.[i]
+    const low = q.low?.[i]
+    const close = q.close?.[i]
+    // Yahoo leaves nulls for non-trading gaps — skip those rows.
+    if (open == null || high == null || low == null || close == null) continue
+    bars.push({
+      time: new Date(ts[i] * 1000).toISOString().slice(0, 10),
+      open,
+      high,
+      low,
+      close,
+      volume: q.volume?.[i] ?? 0
+    })
+  }
+  return bars
+}
+
+export async function getDailyHistory(symbol: string): Promise<DailyBar[]> {
+  const sym = encodeURIComponent(symbol.trim().toUpperCase())
+  if (!sym) return []
+  const now = Math.floor(Date.now() / 1000)
+  const r = await fetchText(`${CHART_URL}/${sym}?period1=0&period2=${now}&interval=1d`)
+  if (!r || !r.ok) {
+    console.warn('[yahoo] chart status', r?.status)
+    return []
+  }
+  try {
+    const bars = parseChart(JSON.parse(r.text))
+    console.log('[yahoo] history for', sym, '->', bars.length, 'bars')
+    return bars
+  } catch (e) {
+    console.warn('[yahoo] chart parse error:', e instanceof Error ? e.message : e)
+    return []
+  }
+}
+
+// Intraday candles from the same v8 chart endpoint. Yahoo limits how far back
+// each interval reaches (1m≤7d, 5/15/30m≤60d, 60m≤730d); the caller passes a
+// matching range. interval/range are allow-listed before hitting the URL.
+const INTRADAY_INTERVALS = new Set(['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h'])
+const INTRADAY_RANGES = new Set(['1d', '5d', '1mo', '3mo', '6mo'])
+
+function parseIntraday(json: unknown): IntradayBar[] {
+  const res = (json as ChartResponse).chart?.result?.[0]
+  const ts = res?.timestamp
+  const q = res?.indicators?.quote?.[0]
+  if (!ts || !q) return []
+  const bars: IntradayBar[] = []
+  for (let i = 0; i < ts.length; i++) {
+    const open = q.open?.[i]
+    const high = q.high?.[i]
+    const low = q.low?.[i]
+    const close = q.close?.[i]
+    if (open == null || high == null || low == null || close == null) continue
+    bars.push({ time: ts[i], open, high, low, close, volume: q.volume?.[i] ?? 0 })
+  }
+  return bars
+}
+
+export async function getIntradayHistory(
+  symbol: string,
+  interval: string,
+  range: string
+): Promise<IntradayBar[]> {
+  if (!INTRADAY_INTERVALS.has(interval) || !INTRADAY_RANGES.has(range)) return []
+  const sym = encodeURIComponent(symbol.trim().toUpperCase())
+  if (!sym) return []
+  const r = await fetchText(`${CHART_URL}/${sym}?range=${range}&interval=${interval}`)
+  if (!r || !r.ok) {
+    console.warn('[yahoo] intraday status', r?.status)
+    return []
+  }
+  try {
+    const bars = parseIntraday(JSON.parse(r.text))
+    console.log('[yahoo] intraday', sym, interval, range, '->', bars.length, 'bars')
+    return bars
+  } catch (e) {
+    console.warn('[yahoo] intraday parse error:', e instanceof Error ? e.message : e)
+    return []
   }
 }
 

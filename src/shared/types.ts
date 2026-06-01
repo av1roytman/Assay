@@ -23,6 +23,17 @@ export interface DailyBar {
   volume: number
 }
 
+// One intraday OHLCV bar. `time` is a UNIX timestamp in seconds (UTC) — what
+// lightweight-charts wants for sub-daily data (multiple bars per calendar day).
+export interface IntradayBar {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
 // Qualitative panels Claude pushes into a research window. Slice 1 ships
 // sec-summary + recommendation; the rest are wired as the build progresses.
 export type PushPanelType =
@@ -42,6 +53,7 @@ export interface PushPanel {
   title?: string
   markdown?: string
   data?: unknown
+  savedAt?: number // epoch ms this panel version was created/persisted
 }
 
 // ── Structured panel payloads ───────────────────────────────────────────────
@@ -117,12 +129,82 @@ export interface Fundamentals {
   beta?: number
 }
 
+// ── Slim research bundle (app-fetched for the /research skill) ───────────────
+// The app fetches this server-side so Claude's qualitative panels get a compact,
+// context-clean figure set instead of the verbose yfinance/SEC MCP blobs. Every
+// field is optional; the skill falls back to MCP for anything missing.
+
+export interface AnalystConsensus {
+  rating?: string // Yahoo recommendationKey, e.g. "strong_buy"
+  score?: number // recommendationMean, 1 (strong buy) … 5 (sell)
+  count?: number // numberOfAnalystOpinions
+  targetLow?: number
+  targetMean?: number
+  targetMedian?: number
+  targetHigh?: number
+}
+
+// Valuation + trajectory + analyst fields pulled from Yahoo quoteSummary.
+export interface YahooResearch {
+  business?: string
+  sector?: string
+  industry?: string
+  price?: number
+  marketCap?: number
+  trailingPE?: number
+  forwardPE?: number
+  pegRatio?: number
+  priceToSales?: number
+  priceToBook?: number
+  beta?: number
+  fiftyTwoWeekLow?: number
+  fiftyTwoWeekHigh?: number
+  fiftyDayAverage?: number
+  twoHundredDayAverage?: number
+  trailingEps?: number
+  forwardEps?: number
+  totalRevenue?: number // TTM
+  revenueGrowth?: number // fraction, e.g. 0.166 = +16.6% (MRQ YoY)
+  earningsGrowth?: number
+  grossMargins?: number
+  operatingMargins?: number
+  profitMargins?: number
+  returnOnEquity?: number
+  freeCashflow?: number
+  operatingCashflow?: number
+  totalCash?: number
+  totalDebt?: number
+  dividendYield?: number // percent, e.g. 0.35
+  analyst?: AnalystConsensus
+}
+
+// Latest-filing figures from data.sec.gov XBRL, each picked from the filing's
+// own accession to avoid cross-context mixing.
+export interface SecData {
+  cik: string
+  filing?: { form: string; period?: string; filed?: string; accession?: string }
+  revenue?: number
+  netIncome?: number
+  operatingIncome?: number
+  grossProfit?: number
+  epsDiluted?: number
+}
+
+export interface ResearchData extends YahooResearch {
+  symbol: string
+  sec?: SecData | null
+}
+
 // The typed surface exposed on `window.api` via the preload bridge.
 export interface AssayApi {
   getQuote(symbol: string): Promise<StockQuote | null>
   getDailyHistory(symbol: string): Promise<DailyBar[]>
+  // Intraday candles (5m/15m/1h …) for the short-range chart views.
+  getIntradayHistory(symbol: string, interval: string, range: string): Promise<IntradayBar[]>
   getFundamentals(symbol: string): Promise<Fundamentals | null>
   getHistory(): Promise<HistoryEntry[]>
+  // Persisted panels (the last dossier) for a ticker — newest content per type.
+  getPanels(symbol: string): Promise<PushPanel[]>
   // Subscribe to "this window is for ticker X". Returns an unsubscribe fn.
   onInit(cb: (init: ResearchInit) => void): () => void
   // Subscribe to panels pushed by Claude. Returns an unsubscribe fn.

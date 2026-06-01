@@ -4,6 +4,9 @@ import { registerIpc } from './ipc/handlers'
 import { startControlServer, stopControlServer } from './server/controlServer'
 import { createHomeWindow, openResearchWindow, pushPanel } from './windows'
 import { recordResearch } from './database/history'
+import { savePanel } from './database/panels'
+import { getResearchData } from './services/yahooService'
+import { getSecData } from './services/secService'
 
 // Single instance: all research windows live in one process so the control
 // server and DB are shared. A second launch just focuses the home window.
@@ -21,7 +24,14 @@ if (!gotLock) {
         recordResearch(ticker)
         openResearchWindow(ticker)
       },
-      onPanel: (panel) => pushPanel(panel)
+      onPanel: (panel) => {
+        const savedAt = savePanel(panel)
+        return pushPanel({ ...panel, savedAt })
+      },
+      onData: async (ticker) => {
+        const [yahoo, sec] = await Promise.all([getResearchData(ticker), getSecData(ticker)])
+        return { symbol: ticker, ...(yahoo ?? {}), sec }
+      }
     })
     createHomeWindow()
 
