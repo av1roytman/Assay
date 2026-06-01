@@ -3,6 +3,7 @@ import type {
   AssayApi,
   StockQuote,
   DailyBar,
+  IntradayBar,
   Fundamentals,
   HistoryEntry,
   PushPanel,
@@ -14,9 +15,12 @@ const api: AssayApi = {
     ipcRenderer.invoke('stocks:quote', symbol),
   getDailyHistory: (symbol: string): Promise<DailyBar[]> =>
     ipcRenderer.invoke('stocks:history', symbol),
+  getIntradayHistory: (symbol: string, interval: string, range: string): Promise<IntradayBar[]> =>
+    ipcRenderer.invoke('stocks:intraday', symbol, interval, range),
   getFundamentals: (symbol: string): Promise<Fundamentals | null> =>
     ipcRenderer.invoke('stocks:fundamentals', symbol),
   getHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke('history:list'),
+  getPanels: (symbol: string): Promise<PushPanel[]> => ipcRenderer.invoke('panels:get', symbol),
   onInit: (cb: (init: ResearchInit) => void): (() => void) => {
     const handler = (_e: IpcRendererEvent, init: ResearchInit): void => cb(init)
     ipcRenderer.on('research:init', handler)

@@ -8,7 +8,7 @@
 // shape Assay needs (no Yahoo extended-session overlay).
 
 import { net } from 'electron'
-import type { StockQuote, DailyBar } from '../../shared/types'
+import type { StockQuote } from '../../shared/types'
 
 const STOOQ_BASE = 'https://stooq.com/q/l/'
 const FETCH_TIMEOUT_MS = 10_000
@@ -146,50 +146,6 @@ function parseNum(raw: string | undefined): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-// Daily OHLCV history via stooq.com's CSV download endpoint.
-// Example: https://stooq.com/q/d/l/?s=aapl.us&i=d
-// Columns: Date,Open,High,Low,Close,Volume (ascending). Returns the most recent
-// ~2 years (504 trading days) — plenty for 200-day MAs and a 52-week range.
-const HISTORY_LIMIT = 504
-
-export async function getDailyHistory(symbol: string): Promise<DailyBar[]> {
-  const s = symbol.trim().toLowerCase()
-  if (!s) return []
-  const url = `https://stooq.com/q/d/l/?s=${s}.us&i=d`
-
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const res = await net.fetch(url, {
-      headers: { 'User-Agent': 'Assay/0.1 (stock research)' },
-      signal: controller.signal
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const body = await res.text()
-    return parseHistory(body)
-  } catch (err) {
-    console.warn('[stooq] history fetch failed:', err instanceof Error ? err.message : err)
-    return []
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-function parseHistory(body: string): DailyBar[] {
-  const lines = body.trim().split(/\r?\n/)
-  // First line is the header; an invalid symbol returns "No data" instead.
-  if (lines.length <= 1 || !lines[0].toLowerCase().startsWith('date')) return []
-  const bars: DailyBar[] = []
-  for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(',')
-    if (cells.length < 6) continue
-    const open = parseNum(cells[1])
-    const high = parseNum(cells[2])
-    const low = parseNum(cells[3])
-    const close = parseNum(cells[4])
-    const volume = parseNum(cells[5])
-    if (open === null || high === null || low === null || close === null) continue
-    bars.push({ time: cells[0].trim(), open, high, low, close, volume: volume ?? 0 })
-  }
-  return bars.slice(-HISTORY_LIMIT)
-}
+// Daily price history moved to yahooService.getDailyHistory — Stooq's history
+// download (q/d/l) now requires an API key; Yahoo's v8 chart endpoint is free
+// and keyless. Stooq still serves live quotes (above).

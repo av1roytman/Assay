@@ -18,6 +18,9 @@ const MAX_BODY = 5_000_000
 export interface ControlCallbacks {
   onResearch: (ticker: string) => void
   onPanel: (panel: PushPanel) => boolean
+  // Fetch the slim research bundle (Yahoo + SEC) for a ticker. Returns whatever
+  // the data services produce; the server just serializes it back to the client.
+  onData: (ticker: string) => Promise<unknown>
 }
 
 let server: Server | null = null
@@ -115,6 +118,21 @@ async function handle(req: IncomingMessage, res: ServerResponse, cb: ControlCall
     }
     const delivered = cb.onPanel({ ...payload, ticker, type } as unknown as PushPanel)
     send(res, 200, { ok: true, delivered })
+    return
+  }
+
+  if (url === '/research-data') {
+    const ticker = String(payload.ticker ?? '').trim().toUpperCase()
+    if (!ticker) {
+      send(res, 400, { ok: false, error: 'ticker required' })
+      return
+    }
+    try {
+      const data = await cb.onData(ticker)
+      send(res, 200, { ok: true, ticker, data })
+    } catch (e) {
+      send(res, 500, { ok: false, error: e instanceof Error ? e.message : 'fetch failed' })
+    }
     return
   }
 

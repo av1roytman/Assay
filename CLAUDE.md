@@ -72,10 +72,10 @@ You: "/research AAPL" in Claude Code
 
 | Source | Provides | Status |
 |---|---|---|
-| **Stooq** | Quotes (CSV) + daily price history (MAs/returns/52wk) | ✅ quotes + history (`getDailyHistory`) |
+| **Stooq** | Live quotes (CSV) | ✅ quotes only — history moved to Yahoo (Stooq's `q/d/l` download now requires an API key, 2026-05-31) |
 | **`yfinance` MCP** (yfmcp) | Claude-side: quotes, financials, analyst estimates, news, holders, options | ✅ data fetches working (after AVG CA-bundle fix — see Environment gotchas) |
 | **`sec-edgar` MCP** (sec-edgar-mcp) | Claude-side: 10-K/10-Q/8-K, XBRL financials, company facts, insider trades | ✅ data fetches working (after AVG CA-bundle fix — see Environment gotchas) |
-| **Yahoo Finance** (app-side) | Key Stats fundamentals — market cap, P/E (trailing/fwd), EPS, div yield, beta — via `yahooService.ts` (cookie+crumb flow over `net.fetch`). Ratios/estimates/earnings dates/ETF data still to come | ✅ key-stats fundamentals; ⏳ rest v2 |
+| **Yahoo Finance** (app-side) | Daily price history (v8 chart endpoint, keyless) + Key Stats fundamentals — market cap, P/E (trailing/fwd), EPS, div yield, beta — via `yahooService.ts` (`net.fetch`; fundamentals use the cookie+crumb flow, the chart endpoint doesn't). Also backs the `/research` slim `data` endpoint. Ratios/estimates/earnings dates/ETF data still to come | ✅ history + key-stats + research bundle; ⏳ rest v2 |
 | **SEC EDGAR** (`companyfacts`, app-side) | Official US fundamentals for the scorecards panel | ⏳ v2 |
 | **FRED** | Macro context — optional, free key | ⏳ later |
 
@@ -118,7 +118,7 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 ### v3 — the value chain + polish
 - [ ] Value-chain **node graph** (graph lib, e.g. React Flow) — Claude supplies entities/edges
 - [ ] Reopen-from-history, window tabs option, settings, electron-builder packaging
-- [ ] Optional: save full dossiers (upgrade from lightweight history)
+- [x] Persist pushed panels to `assay.db` (migration v3, `panels` table; one row per ticker+type, upserted with `created_at`). Windows reload the last dossier with its date on open ([panels.ts](src/main/database/panels.ts), `getPanels` IPC); fresh pushes overwrite by `savedAt`. ("save full dossiers")
 
 ### Out of scope (intentional)
 - [ ] Idea screening / discovery — bring-your-own-ticker
