@@ -5,6 +5,7 @@ import type {
   DailyBar,
   IntradayBar,
   Fundamentals,
+  Scorecards,
   HistoryEntry,
   PushPanel,
   ResearchInit
@@ -19,6 +20,8 @@ const api: AssayApi = {
     ipcRenderer.invoke('stocks:intraday', symbol, interval, range),
   getFundamentals: (symbol: string): Promise<Fundamentals | null> =>
     ipcRenderer.invoke('stocks:fundamentals', symbol),
+  getScorecards: (symbol: string): Promise<Scorecards | null> =>
+    ipcRenderer.invoke('stocks:scorecards', symbol),
   getHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke('history:list'),
   getPanels: (symbol: string): Promise<PushPanel[]> => ipcRenderer.invoke('panels:get', symbol),
   onInit: (cb: (init: ResearchInit) => void): (() => void) => {

@@ -99,6 +99,43 @@ export interface Metric {
   tone?: 'good' | 'bad' | 'neutral'
 }
 
+// ── Scorecards (app-owned, computed in main from Yahoo) ──────────────────────
+
+export type ScorecardTone = 'good' | 'bad' | 'neutral'
+
+export type ScorecardKey =
+  | 'value'
+  | 'growth'
+  | 'dividend'
+  | 'technical'
+  | 'etf-profile'
+  | 'etf-technical'
+
+export interface Scorecard {
+  key: ScorecardKey
+  title: string // e.g. "💰 Value"
+  status: ScorecardTone // rolled-up card color
+  metrics: Metric[] // reuses the Metric type above
+  note?: string // e.g. "No dividend" or a data caveat
+}
+
+export interface Scorecards {
+  symbol: string
+  kind: 'stock' | 'etf'
+  cards: Scorecard[]
+  asOf: string // ISO timestamp
+}
+
+// ETF-specific data from Yahoo's topHoldings / fundProfile modules. All weights
+// and ratios are stored as fractions (0.0009 = 0.09%), formatted at render time.
+export interface EtfData {
+  expenseRatio?: number // fraction, e.g. 0.0009
+  distributionYield?: number // fraction, e.g. 0.013
+  totalAssets?: number // AUM in USD
+  topHoldings?: { symbol?: string; name?: string; weight?: number }[] // weight as fraction
+  sectorWeights?: { sector: string; weight: number }[] // weight as fraction
+}
+
 export interface SecSummaryData {
   business: string // what the company does
   filing?: { form: string; period?: string; filed?: string }
@@ -175,6 +212,13 @@ export interface YahooResearch {
   totalCash?: number
   totalDebt?: number
   dividendYield?: number // percent, e.g. 0.35
+  enterpriseToEbitda?: number
+  currentRatio?: number
+  debtToEquity?: number
+  payoutRatio?: number // fraction, e.g. 0.25 = 25%
+  returnOnAssets?: number
+  quoteType?: string // Yahoo price.quoteType: "EQUITY" | "ETF" | …
+  etf?: EtfData // present only for ETFs
   analyst?: AnalystConsensus
 }
 
@@ -202,6 +246,7 @@ export interface AssayApi {
   // Intraday candles (5m/15m/1h …) for the short-range chart views.
   getIntradayHistory(symbol: string, interval: string, range: string): Promise<IntradayBar[]>
   getFundamentals(symbol: string): Promise<Fundamentals | null>
+  getScorecards(symbol: string): Promise<Scorecards | null>
   getHistory(): Promise<HistoryEntry[]>
   // Persisted panels (the last dossier) for a ticker — newest content per type.
   getPanels(symbol: string): Promise<PushPanel[]>
