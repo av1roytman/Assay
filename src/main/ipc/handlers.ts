@@ -3,6 +3,7 @@ import { getQuote } from '../services/stooqService'
 import { getFundamentals, getDailyHistory, getIntradayHistory } from '../services/yahooService'
 import { listHistory } from '../database/history'
 import { getStoredPanels } from '../database/panels'
+import { getScorecards } from '../services/scorecardService'
 
 // Renderer-facing channels. Keep mirrored in src/shared/types.ts (AssayApi)
 // and src/preload/index.ts. Push channels (research:init, panel:update) are
@@ -14,6 +15,7 @@ export function registerIpc(): void {
     getIntradayHistory(symbol, interval, range)
   )
   ipcMain.handle('stocks:fundamentals', (_e, symbol: string) => getFundamentals(symbol))
+  ipcMain.handle('stocks:scorecards', (_e, symbol: string) => getScorecards(symbol))
   ipcMain.handle('history:list', () => listHistory())
   ipcMain.handle('panels:get', (_e, symbol: string) => getStoredPanels(symbol))
 }
