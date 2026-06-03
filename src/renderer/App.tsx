@@ -557,7 +557,7 @@ function RiskRow({ cat }: { cat: RiskCategory }): JSX.Element {
     <div>
       <div className="flex items-center gap-2">
         <span className="text-[12px] font-medium text-zinc-200">{cat.category}</span>
-        <span className="tracking-tight text-red-300">
+        <span className={`tracking-tight ${sev.cls}`}>
           {'●'.repeat(sev.dots)}
           <span className="text-zinc-700">{'○'.repeat(3 - sev.dots)}</span>
         </span>
