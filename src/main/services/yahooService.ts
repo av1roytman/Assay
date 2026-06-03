@@ -10,7 +10,7 @@
 // omits the valuation block) rather than leaving the renderer stuck on "Loading…".
 
 import { net } from 'electron'
-import type { DailyBar, IntradayBar, Fundamentals, YahooResearch } from '../../shared/types'
+import type { DailyBar, IntradayBar, Fundamentals, YahooResearch, EtfData } from '../../shared/types'
 
 const CRUMB_URL = 'https://query1.finance.yahoo.com/v1/test/getcrumb'
 const COOKIE_URL = 'https://fc.yahoo.com'
@@ -92,10 +92,53 @@ function parse(json: unknown): Fundamentals | null {
 // for the recommendation + sec-summary panels — a fraction of the yfinance MCP
 // blob's size (no officers, governance scores, address, etc.).
 
-const RESEARCH_MODULES = 'assetProfile,price,summaryDetail,defaultKeyStatistics,financialData'
+const RESEARCH_MODULES =
+  'assetProfile,price,summaryDetail,defaultKeyStatistics,financialData,topHoldings,fundProfile'
 
 function strVal(node: unknown): string | undefined {
   return typeof node === 'string' && node.trim() ? node.trim() : undefined
+}
+
+interface HoldingNode {
+  symbol?: string
+  holdingName?: string
+  holdingPercent?: unknown
+}
+
+// Pull ETF-specific fields from the topHoldings / fundProfile modules. Returns
+// undefined for non-ETFs (modules absent), so YahooResearch.etf stays unset.
+function parseEtf(r: Record<string, Record<string, unknown>>): EtfData | undefined {
+  const th = r.topHoldings
+  const fp = r.fundProfile
+  if (!th && !fp) return undefined
+  const holdings = Array.isArray(th?.holdings)
+    ? (th.holdings as HoldingNode[]).map((h) => ({
+        symbol: typeof h.symbol === 'string' ? h.symbol : undefined,
+        name: typeof h.holdingName === 'string' ? h.holdingName : undefined,
+        weight: rawNum(h.holdingPercent)
+      }))
+    : undefined
+  const sectorWeights = Array.isArray(th?.sectorWeightings)
+    ? (th.sectorWeightings as Record<string, unknown>[])
+        .map((node) => {
+          const entry = Object.entries(node)[0]
+          if (!entry) return undefined
+          const [sector, val] = entry
+          const weight = rawNum(val)
+          return weight != null ? { sector, weight } : undefined
+        })
+        .filter((s): s is { sector: string; weight: number } => s != null)
+    : undefined
+  const feesNode = (fp?.feesExpensesInvestment as Record<string, unknown>) ?? {}
+  const sd = r.summaryDetail ?? {}
+  const ks = r.defaultKeyStatistics ?? {}
+  return {
+    expenseRatio: rawNum(feesNode.annualReportExpenseRatio),
+    distributionYield: rawNum((th as Record<string, unknown>)?.yield),
+    totalAssets: rawNum(sd.totalAssets) ?? rawNum(ks.totalAssets),
+    topHoldings: holdings,
+    sectorWeights
+  }
 }
 
 function parseResearch(json: unknown): YahooResearch | null {
@@ -137,6 +180,13 @@ function parseResearch(json: unknown): YahooResearch | null {
     totalCash: rawNum(fd.totalCash),
     totalDebt: rawNum(fd.totalDebt),
     dividendYield: divYield != null ? divYield * 100 : undefined,
+    enterpriseToEbitda: rawNum(ks.enterpriseToEbitda) ?? rawNum(fd.enterpriseToEbitda),
+    currentRatio: rawNum(fd.currentRatio),
+    debtToEquity: rawNum(fd.debtToEquity),
+    payoutRatio: rawNum(sd.payoutRatio),
+    returnOnAssets: rawNum(fd.returnOnAssets),
+    quoteType: strVal((pr as Record<string, unknown>).quoteType),
+    etf: parseEtf(r),
     analyst: {
       rating: strVal(fd.recommendationKey),
       score: rawNum(fd.recommendationMean),
