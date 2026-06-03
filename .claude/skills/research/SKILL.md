@@ -139,6 +139,43 @@ After the sub-agent returns, write the recommendation **yourself** from its `dat
 }
 ```
 
+## Risks (you, the main agent on Opus, write & push this)
+
+After the sub-agent returns, write the `risks` panel **yourself** from its risk-input notes + the `data` bundle + SEC figures — the severity judgment stays on the stronger model:
+- **Categories:** group risks under labels like Financial / Competitive / Regulatory / Macro / Operational. Each gets a `severity` (`high` | `medium` | `low`) and tight bullet `points`.
+- **Screens (optional):** include a `screens` strip **only with what the bundle already supports** — e.g. FCF coverage (`freeCashflow` vs `totalDebt`/interest), net-debt read (`totalDebt − totalCash`), accruals sign (`operatingCashflow` vs `netIncome`), current ratio. Add a full **Altman Z only if** its inputs are present. Do **NOT** make extra MCP calls to populate named academic scores (Piotroski-F, Beneish-M); omit what you can't compute cheaply.
+- **`note`:** always frame screens as **structural signals, not a return/performance forecast.**
+- Write the JSON to a temp file and push (then delete the temp file):
+  ```
+  node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> risks --title "Risks & red flags" --data <temp.json>
+  ```
+  Do NOT send markdown for this type. It returns `{"ok":true,"delivered":true}`.
+
+**`risks` JSON shape:**
+```json
+{
+  "categories": [
+    {
+      "category": "Financial",
+      "severity": "high",
+      "points": ["Net debt rising while FCF stays thin", "Interest coverage compressing"]
+    },
+    {
+      "category": "Regulatory",
+      "severity": "medium",
+      "points": ["DOJ antitrust case unresolved"]
+    }
+  ],
+  "screens": [
+    { "label": "FCF coverage", "value": "1.8×", "band": "adequate", "tone": "neutral" },
+    { "label": "Accruals", "value": "negative", "band": "earnings > cash", "tone": "bad" }
+  ],
+  "note": "Screens are structural signals from filing data, not a forecast of returns.",
+  "asOf": "data source + date (optional)"
+}
+```
+`severity` is `"high" | "medium" | "low"`; screen `tone` is `"good" | "bad" | "neutral"`. `screens`, `note`, `asOf` are optional.
+
 ## Notes
-- More panels (value chain, news, risks, peers, scorecards) are coming — only `sec-summary` and `recommendation` exist for now.
+- Panels live now: `sec-summary`, `recommendation`, `news`, `risks` (plus the app-owned chart, key stats, and scorecards). Still coming: value chain and peers.
 - If the app fails to launch or a push fails, surface it plainly to the user.
