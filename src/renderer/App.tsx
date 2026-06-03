@@ -7,6 +7,13 @@ import type {
   RecommendationData,
   SecSummaryData,
   Metric,
+  NewsData,
+  NewsItem,
+  NewsSentiment,
+  RisksData,
+  RiskCategory,
+  RiskSeverity,
+  DistressScreen,
   PriceTargets,
   AnalystCall,
   Fundamentals,
@@ -130,6 +137,8 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
         </Panel>
         <RecommendationCard panel={panels['recommendation']} />
         <SecSummaryCard panel={panels['sec-summary']} />
+        <NewsCard panel={panels['news']} />
+        <RisksCard panel={panels['risks']} />
       </div>
     </div>
   )
@@ -387,6 +396,198 @@ function SecSummary({ data }: { data: SecSummaryData }): JSX.Element {
         </div>
       )}
     </div>
+  )
+}
+
+// ── News & catalysts ─────────────────────────────────────────────────────────
+
+function NewsCard({ panel }: { panel: PushPanel | undefined }): JSX.Element {
+  const data = panel?.data as NewsData | undefined
+  return (
+    <Panel
+      title={panel?.title ?? 'News & catalysts'}
+      meta={panel?.savedAt ? `researched ${fmtStamp(panel.savedAt)}` : undefined}
+    >
+      {data ? <News data={data} /> : <Loading label="Waiting for Claude…" />}
+    </Panel>
+  )
+}
+
+function News({ data }: { data: NewsData }): JSX.Element {
+  return (
+    <div>
+      {data.items.length > 0 ? (
+        <ul className="space-y-3">
+          {data.items.map((it, i) => (
+            <NewsRow key={i} item={it} />
+          ))}
+        </ul>
+      ) : (
+        <Empty msg="No recent news" />
+      )}
+
+      {data.catalysts && data.catalysts.length > 0 && (
+        <>
+          <SubHead>Catalysts ahead</SubHead>
+          <ul className="space-y-1 text-[13px]">
+            {data.catalysts.map((c, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="text-zinc-600">▸</span>
+                <span className="text-zinc-300">{c.label}</span>
+                {c.when && <span className="text-zinc-500">· {c.when}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {data.note && (
+        <div className="mt-4 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[12px] leading-relaxed text-amber-200/80">
+          {data.note}
+        </div>
+      )}
+
+      {data.asOf && <div className="mt-4 text-[11px] text-zinc-600">{data.asOf}</div>}
+    </div>
+  )
+}
+
+function NewsRow({ item }: { item: NewsItem }): JSX.Element {
+  return (
+    <li>
+      <div className="flex items-start justify-between gap-2">
+        {item.url ? (
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[13px] font-medium text-zinc-200 hover:text-emerald-300 hover:underline"
+          >
+            {item.headline}
+          </a>
+        ) : (
+          <span className="text-[13px] font-medium text-zinc-200">{item.headline}</span>
+        )}
+        {item.sentiment && <SentimentPill sentiment={item.sentiment} />}
+      </div>
+      <div className="mt-0.5 text-[11px] text-zinc-500">
+        {item.source}
+        {item.date && ` · ${fmtRelDate(item.date)}`}
+      </div>
+      {item.why && (
+        <div className="mt-0.5 text-[12px] leading-relaxed text-zinc-400">{item.why}</div>
+      )}
+    </li>
+  )
+}
+
+const SENTIMENT_STYLES: Record<NewsSentiment, { label: string; cls: string }> = {
+  positive: { label: 'pos', cls: 'bg-emerald-500/15 text-emerald-300' },
+  negative: { label: 'neg', cls: 'bg-red-500/15 text-red-300' },
+  neutral: { label: 'neu', cls: 'bg-zinc-700/50 text-zinc-400' }
+}
+
+function SentimentPill({ sentiment }: { sentiment: NewsSentiment }): JSX.Element {
+  const s = SENTIMENT_STYLES[sentiment] ?? SENTIMENT_STYLES.neutral
+  return (
+    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${s.cls}`}>
+      {s.label}
+    </span>
+  )
+}
+
+// ── Risks & red flags ────────────────────────────────────────────────────────
+
+function RisksCard({ panel }: { panel: PushPanel | undefined }): JSX.Element {
+  const data = panel?.data as RisksData | undefined
+  return (
+    <Panel
+      title={panel?.title ?? 'Risks & red flags'}
+      meta={panel?.savedAt ? `researched ${fmtStamp(panel.savedAt)}` : undefined}
+    >
+      {data ? <Risks data={data} /> : <Loading label="Waiting for Claude…" />}
+    </Panel>
+  )
+}
+
+const SEVERITY_META: Record<RiskSeverity, { dots: number; label: string; cls: string }> = {
+  high: { dots: 3, label: 'high', cls: 'text-red-300' },
+  medium: { dots: 2, label: 'med', cls: 'text-amber-300' },
+  low: { dots: 1, label: 'low', cls: 'text-zinc-400' }
+}
+
+function Risks({ data }: { data: RisksData }): JSX.Element {
+  return (
+    <div>
+      {data.categories.length > 0 ? (
+        <div className="space-y-3">
+          {data.categories.map((c, i) => (
+            <RiskRow key={i} cat={c} />
+          ))}
+        </div>
+      ) : (
+        <Empty msg="No risks flagged" />
+      )}
+
+      {data.screens && data.screens.length > 0 && (
+        <>
+          <SubHead>Screens</SubHead>
+          <div className="flex flex-wrap gap-2">
+            {data.screens.map((s, i) => (
+              <ScreenChip key={i} screen={s} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {data.note && (
+        <div className="mt-4 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[12px] leading-relaxed text-amber-200/80">
+          {data.note}
+        </div>
+      )}
+
+      {data.asOf && <div className="mt-4 text-[11px] text-zinc-600">{data.asOf}</div>}
+    </div>
+  )
+}
+
+function RiskRow({ cat }: { cat: RiskCategory }): JSX.Element {
+  const sev = SEVERITY_META[cat.severity] ?? SEVERITY_META.low
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <span className="text-[12px] font-medium text-zinc-200">{cat.category}</span>
+        <span className={`tracking-tight ${sev.cls}`}>
+          {'●'.repeat(sev.dots)}
+          <span className="text-zinc-700">{'○'.repeat(3 - sev.dots)}</span>
+        </span>
+        <span className={`text-[10px] uppercase tracking-wide ${sev.cls}`}>{sev.label}</span>
+      </div>
+      <ul className="mt-1 space-y-0.5 text-[13px] text-zinc-300">
+        {cat.points.map((p, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="text-zinc-600">•</span>
+            <span>{p}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function ScreenChip({ screen }: { screen: DistressScreen }): JSX.Element {
+  const tone =
+    screen.tone === 'good'
+      ? 'text-emerald-300'
+      : screen.tone === 'bad'
+        ? 'text-red-300'
+        : 'text-zinc-200'
+  return (
+    <span className="rounded-md bg-zinc-800/60 px-2 py-1 text-[11px]">
+      <span className="text-zinc-500">{screen.label} </span>
+      <span className={`font-medium tabular-nums ${tone}`}>{screen.value}</span>
+      {screen.band && <span className="text-zinc-500"> ({screen.band})</span>}
+    </span>
   )
 }
 
@@ -715,6 +916,20 @@ function fmtVol(n: number): string {
 
 function pctStr(n: number): string {
   return (n >= 0 ? '+' : '') + n.toFixed(1) + '%'
+}
+
+// Relative age of an ISO date, computed at view time so reopened dossiers stay
+// accurate. Falls back to an absolute "Mon D" for future or >30-day-old dates.
+function fmtRelDate(iso: string): string {
+  const t = Date.parse(iso)
+  if (Number.isNaN(t)) return iso
+  const days = Math.floor((Date.now() - t) / 86_400_000)
+  if (days < 0) return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  if (days === 0) return 'today'
+  if (days === 1) return '1d ago'
+  if (days < 7) return `${days}d ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 function fmtStamp(ts: number): string {

@@ -145,6 +145,56 @@ export interface SecSummaryData {
   note?: string // caveat / data-quality note
 }
 
+// ── News & catalysts (Claude-pushed) ─────────────────────────────────────────
+
+export type NewsSentiment = 'positive' | 'negative' | 'neutral'
+
+export interface NewsItem {
+  headline: string
+  source: string // "Reuters", "Bloomberg", …
+  date?: string // ISO date (YYYY-MM-DD); rendered relative at view time
+  url?: string
+  why?: string // one-line "why it matters"
+  sentiment?: NewsSentiment
+}
+
+export interface Catalyst {
+  label: string // "Q3 earnings", "WWDC keynote"
+  when?: string // free text: "~Aug 1", "Jun 9"
+  kind?: 'earnings' | 'product' | 'regulatory' | 'other'
+}
+
+export interface NewsData {
+  items: NewsItem[]
+  catalysts?: Catalyst[]
+  note?: string
+  asOf?: string
+}
+
+// ── Risks & red flags (Claude-pushed) ────────────────────────────────────────
+
+export type RiskSeverity = 'high' | 'medium' | 'low'
+
+export interface RiskCategory {
+  category: string // "Financial", "Competitive", "Regulatory", "Macro", "Operational"
+  severity: RiskSeverity
+  points: string[] // bullet risks under this category
+}
+
+export interface DistressScreen {
+  label: string // "FCF coverage", "Altman Z", "Accruals"
+  value: string // "1.8×", "3.1", "negative"
+  band?: string // "safe", "thin", "manipulation flag"
+  tone?: 'good' | 'bad' | 'neutral'
+}
+
+export interface RisksData {
+  categories: RiskCategory[]
+  screens?: DistressScreen[] // optional structural-distress strip
+  note?: string // methodology caveat — structural signal, not a forecast
+  asOf?: string
+}
+
 export interface ResearchInit {
   ticker: string
 }
