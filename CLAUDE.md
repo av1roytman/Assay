@@ -111,8 +111,8 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 ### v2 — fill out the panels
 - [x] Rule-scorecards panel — app-computed, **Yahoo-primary** (Value/Growth/Dividend/Technical + ETF Profile/Technical); pure `scoring.ts` engine (vitest-tested) → `scorecardService.ts` → `stocks:scorecards` IPC → `ScorecardPanel`. SEC-EDGAR source + sector-aware thresholds deferred (see [spec](docs/superpowers/specs/2026-06-03-scorecards-panel-design.md))
 - [ ] Analyst-consensus data (Yahoo) shown beside Claude's thesis
-- [ ] News & catalysts panel
-- [ ] Risks / red flags panel
+- [x] News & catalysts panel — Claude-pushed (`NewsData`); Sonnet sub-agent gathers (yfinance news + WebSearch) & pushes. See [spec](docs/superpowers/specs/2026-06-03-news-risks-panels-design.md)
+- [x] Risks / red flags panel — Claude-pushed (`RisksData`); main Opus agent writes (categorized + optional structural screens). Same spec
 - [ ] Peer comparison (Claude picks peers → app fetches their metrics)
 
 ### v3 — the value chain + polish
