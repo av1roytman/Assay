@@ -1,0 +1,144 @@
+---
+name: research
+description: Research a US stock or ETF and stream a live research dossier into the Assay desktop app. Use when the user asks to research, analyze, or "look into" a ticker (e.g. "research AAPL", "/research MSFT", "should I buy NVDA?").
+---
+
+# /research <TICKER>
+
+Run a full research pass on a US-listed stock or ETF and render it live in the **Assay** app. The app draws the numeric panels (price chart, key stats) itself. The qualitative layer is split: a cheap **Sonnet sub-agent** does the mechanical gathering and the **SEC-summary** panel, then hands you a slim data bundle; **you (the main agent, on Opus) write the recommendation thesis** from that bundle and push it — so the judgment call stays on the stronger model while the bulk work stays cheap.
+
+## How to run this (orchestration — you, the main agent)
+
+1. Coverage is **US-listed stocks & ETFs only.** NYSE/Nasdaq-listed **ADRs of foreign companies count** (they have a US ticker plus Yahoo/SEC data — e.g. ASX = ASE Technology, TSM, BABA). Out of scope and stop: tickers **not listed on a US exchange**, crypto, and forex. If unsure whether a ticker is US-listed, proceed — the data fetch will fail cleanly if it isn't.
+2. Spawn **one** sub-agent via the **Agent** tool with **`subagent_type: "general-purpose"` and `model: "sonnet"`**, passing the **Sub-agent prompt** below with `<TICKER>` substituted. (Do **not** use `run_in_background` — you need its return value to write the recommendation.)
+3. **Wait passively.** Do NOT run `echo`/`sleep`/poll filler — the harness re-invokes you when the sub-agent returns. (Global no-polling rule is in memory.)
+4. The sub-agent returns the **slim `data` bundle** (≈600 tokens) plus confirmation it pushed the sec-summary. Using that bundle, **write and push the recommendation yourself** — see **Recommendation (you write this)** below.
+5. Relay to the user: confirm both panels rendered, and surface your recommendation **call + headline**. Don't re-paste the raw bundle.
+
+## Sub-agent prompt (substitute `<TICKER>`)
+
+> You are gathering data for **`<TICKER>`** and rendering the **SEC-summary** panel in the running Assay desktop app. You do **not** write the recommendation — the calling agent does that from the bundle you return.
+>
+> Work efficiently — a clean run is **~5–6 tool calls**. Do NOT create probe/scratch files, do NOT re-run a call that already returned, and do NOT run `echo`/`sleep`/poll filler to "wait" — results arrive on their own.
+>
+> Helper CLI: `node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs <cmd>`
+>
+> **1. Ensure the app and open the window:**
+> ```
+> node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs ensure
+> node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs research <TICKER>
+> ```
+> The app self-renders the price chart and key stats — do NOT duplicate that.
+>
+> **2. Fetch the data bundle — app-side first, MCP only to fill gaps.**
+> Run `node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs data <TICKER>` → `{ "ok": true, "ticker", "data": {…} }`. `data` carries:
+> - **Valuation/price:** `price`, `marketCap`, `trailingPE`, `forwardPE`, `pegRatio`, `priceToSales`, `priceToBook`, `beta`, `fiftyTwoWeekLow/High`, `fiftyDayAverage`, `twoHundredDayAverage`, `trailingEps`, `forwardEps`.
+> - **Trajectory:** `totalRevenue` (TTM), `revenueGrowth`, `earningsGrowth`, `grossMargins`, `operatingMargins`, `profitMargins`, `returnOnEquity`, `freeCashflow`, `operatingCashflow`, `totalCash`, `totalDebt` — growth/margins are **fractions** (0.166 = +16.6%), TTM/MRQ.
+> - **`analyst`:** `rating`, `score` (1 = strong buy … 5 = sell), `count`, `targetLow/Mean/Median/High`. May be thin: `rating` can be `"none"` and `score` absent for lightly-covered names.
+> - **`sec`:** latest `filing` (`form`/`period`/`filed`/`accession`) + `revenue`, `netIncome`, `operatingIncome`, `grossProfit`, `epsDiluted` — each picked from that filing's own accession (context-clean, **native XBRL signs** — a loss stays negative) — plus `business`/`sector`/`industry`.
+>
+> Call MCP **only** to fill a genuine gap:
+> - `data.sec` is `null` or missing figures you need → `mcp__sec-edgar__get_financials` / `mcp__sec-edgar__get_recent_filings` with **`identifier`**.
+> - `data` is empty / the call failed → `mcp__yfinance__yfinance_get_ticker_info` with **`symbol`**.
+> - Param reminder: yfinance uses **`symbol`**; sec-edgar uses **`identifier`** — wrong names silently return generic/empty data. The app's `sec` figures are accession-scoped; if you fall back to MCP `get_financials`, beware its raw XBRL can mix `context_ref`s and once reported COIN's loss with the wrong (positive) sign — trust `data.sec`. Flag any caveat in the panel `note`.
+>
+> **Foreign private issuers / ADRs (e.g. ASX, TSM, BABA).** These file **20-F (annual) / 6-K (interim)**, not 10-K/10-Q, and the app's `data.sec` typically returns **only a CIK with no XBRL figures** — don't burn MCP calls chasing them; source the financials from the Yahoo bundle instead. Critically, **reporting currency may not be USD**: operating figures (revenue, cash flow, debt) can be in the home currency (TWD, CNY, etc.) while `price`/`marketCap`/`analyst.target*` are USD (the ADR). When that's the case:
+> - **State the currency** on the affected metrics and in the panel `note`.
+> - **Distrust cross-currency ratios** — `priceToSales` is meaningless when revenue is in TWD and market cap in USD; do not present it as-is. `trailingPE`/`forwardPE` (both USD, from EPS) and margins/growth (unitless fractions) remain valid.
+>
+> **3. Build and push the SEC-summary panel only.** Write the JSON to a temp file, send with `--data`, delete the temp file:
+> ```
+> node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> sec-summary --title "SEC Filing Summary" --data <temp.json>
+> ```
+> Do NOT send markdown for this type. Keep it tight: real numbers, short strings. Use `tone: "good" | "bad" | "neutral"` on metrics (a loss → `bad`). It returns `{"ok":true,"delivered":true}`.
+>
+> **`sec-summary` JSON shape:**
+> ```json
+> {
+>   "business": "what the company does — 1–2 sentences",
+>   "filing": { "form": "10-Q", "period": "Q1 2026 (ended 2026-03-31)", "filed": "2026-05-07" },
+>   "metrics": [
+>     { "label": "Revenue", "value": "$1.41B", "sub": "-31% YoY", "tone": "bad" },
+>     { "label": "Op income", "value": "-$21M", "tone": "bad" },
+>     { "label": "Net income", "value": "-$394M", "tone": "bad" },
+>     { "label": "Diluted EPS", "value": "-$1.49", "tone": "bad" }
+>   ],
+>   "highlights": [ "tight bullet", "another notable item" ],
+>   "trajectory": "short read on where the financials are heading (optional)",
+>   "note": "any caveat or data-quality flag (optional — e.g. reporting currency, 20-F filer)"
+> }
+> ```
+> For a non-USD filer, label values (e.g. `"NT$670.9B"`) and add the currency to `note`.
+>
+> **3b. Gather and push the News & catalysts panel.**
+> - Recent headlines: `mcp__yfinance__yfinance_get_ticker_news` (param: **`symbol`**) — take the most relevant 4–6.
+> - Upcoming catalysts: run **one** WebSearch (e.g. `"<TICKER> earnings date 2026"`, plus any known product/regulatory events) — keep it to a short list, don't over-fetch.
+> - Build the `news` JSON, write it to a temp file, push, delete the temp file:
+> ```
+> node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> news --title "News & catalysts" --data <temp.json>
+> ```
+> Do NOT send markdown for this type. Keep `why` to one tight line; set `sentiment` per item; use ISO dates (`YYYY-MM-DD`).
+>
+> **`news` JSON shape:**
+> ```json
+> {
+>   "items": [
+>     {
+>       "headline": "Apple unveils M5 chips",
+>       "source": "Reuters",
+>       "date": "2026-05-30",
+>       "url": "https://…",
+>       "why": "Signals a faster Mac refresh cycle",
+>       "sentiment": "positive"
+>     }
+>   ],
+>   "catalysts": [
+>     { "label": "Q3 earnings", "when": "~Aug 1", "kind": "earnings" },
+>     { "label": "WWDC keynote", "when": "Jun 9", "kind": "product" }
+>   ],
+>   "note": "optional caveat",
+>   "asOf": "data source + date (optional)"
+> }
+> ```
+> `sentiment` is `"positive" | "negative" | "neutral"`; `kind` is `"earnings" | "product" | "regulatory" | "other"`. `catalysts`, `note`, `asOf` are optional.
+>
+> **4. Return to the caller** (this is the only output that matters — it's machine-consumed, not shown to a human):
+> - The **entire `data` bundle JSON verbatim** (the caller needs it to write the recommendation).
+> - One line confirming the sec-summary push returned `delivered:true` (or what failed).
+> - Any data-quality caveat you hit (reporting currency, thin analyst coverage, sparse SEC data). Do NOT write a recommendation — that's the caller's job.
+> - **Risk inputs for the caller:** the filing's **risk-factor themes** (Item 1A topics, going-concern / liquidity flags, customer-concentration or litigation notes you saw) plus any balance-sheet figures you already have. Just list what you encountered — do NOT write the risks panel; the caller does that.
+
+## Recommendation (you, the main agent on Opus, write & push this)
+
+After the sub-agent returns, write the recommendation **yourself** from its `data` bundle — this is the judgment call, kept on the stronger model:
+- **Call + thesis:** your own buy/hold/avoid with reasoning, `buyIf`, `avoidIf`. Apply a **consistent valuation discipline across tickers** (e.g. forward P/E vs growth — the cross-ticker consistency is the main reason this lives on Opus, not the sub-agent). For non-USD filers, lean on currency-clean signals (forward P/E, margins, growth, price-vs-MA) and **ignore cross-currency ratios** like P/S.
+- **`street`** maps from `data.analyst`: `rating`, `score`, `analysts: count`, `targets: { current: data.price, low: targetLow, mean: targetMean, median: targetMedian, high: targetHigh }`.
+  - **Thin / absent coverage:** if `rating` is `"none"` or `score` is missing, **omit `score`** and set `rating` to a plain-language label like `"Thin coverage (3 analysts, no consensus rating)"`. Note when the price already sits above the mean target.
+- Write the JSON to a temp file and push (then delete the temp file):
+  ```
+  node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> recommendation --title "Recommendation" --data <temp.json>
+  ```
+  Do NOT send markdown for this type. It returns `{"ok":true,"delivered":true}`.
+
+**`recommendation` JSON shape:**
+```json
+{
+  "call": "buy | hold | avoid",
+  "headline": "one-line summary of the call",
+  "thesis": "short paragraph — the reasoning behind your call",
+  "buyIf": "what would flip you to buy (optional)",
+  "avoidIf": "what would flip you to avoid (optional)",
+  "street": {
+    "rating": "Buy",
+    "score": 1.98,
+    "analysts": 43,
+    "targets": { "current": 312, "low": 215, "mean": 310.5, "median": 310, "high": 400 },
+    "notable": [ { "firm": "Wedbush", "target": 400, "note": "AI inflection" } ]
+  },
+  "asOf": "data source + date (optional)"
+}
+```
+
+## Notes
+- More panels (value chain, news, risks, peers, scorecards) are coming — only `sec-summary` and `recommendation` exist for now.
+- If the app fails to launch or a push fails, surface it plainly to the user.
