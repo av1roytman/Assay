@@ -102,14 +102,14 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 - [x] Local control server in main (`/health`, `/research`, `/panel`) + token auth + IPC→renderer bridge ([controlServer.ts](src/main/server/controlServer.ts), [windows.ts](src/main/windows.ts))
 - [x] Panel dashboard renderer (grid, loading states, new window per ticker) — replaced the quote screen ([App.tsx](src/renderer/App.tsx))
 - [x] App self-fetch numeric panels: **chart** (lightweight-charts, [ChartPanel.tsx](src/renderer/components/ChartPanel.tsx)) + key stats
-- [x] `/research <TICKER>` skill (in `<user-claude-dir>/skills/research/SKILL.md`) + control client ([scripts/assay.mjs](scripts/assay.mjs)): ensure → research → stream panels
+- [x] `/research <TICKER>` skill (in-repo at [.claude/skills/research/SKILL.md](.claude/skills/research/SKILL.md)) + control client ([scripts/assay.mjs](scripts/assay.mjs)): ensure → research → stream panels
 - [x] First Claude panels wired end-to-end: **SEC summary** + **recommendation**
 - [x] Lightweight history (tickers + dates) in SQLite ([history.ts](src/main/database/history.ts), migration v2)
 - [ ] **Live click-through test** — run `npm run dev` + `/research AAPL`, confirm chart paints and Claude panels stream in
 - [ ] Earnings / notable-dates numeric panel (needs Yahoo service) — deferred to v2
 
 ### v2 — fill out the panels
-- [ ] Rule-scorecards panel (app-computed from SEC EDGAR + Yahoo fundamentals)
+- [x] Rule-scorecards panel — app-computed, **Yahoo-primary** (Value/Growth/Dividend/Technical + ETF Profile/Technical); pure `scoring.ts` engine (vitest-tested) → `scorecardService.ts` → `stocks:scorecards` IPC → `ScorecardPanel`. SEC-EDGAR source + sector-aware thresholds deferred (see [spec](docs/superpowers/specs/2026-06-03-scorecards-panel-design.md))
 - [ ] Analyst-consensus data (Yahoo) shown beside Claude's thesis
 - [ ] News & catalysts panel
 - [ ] Risks / red flags panel
