@@ -9,9 +9,11 @@ import type {
   Metric,
   PriceTargets,
   AnalystCall,
-  Fundamentals
+  Fundamentals,
+  Scorecards
 } from '../shared/types'
 import { ChartPanel } from './components/ChartPanel'
+import { ScorecardGrid } from './components/ScorecardPanel'
 
 export default function App(): JSX.Element {
   const [ticker, setTicker] = useState<string | null>(null)
@@ -62,6 +64,7 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
   const [bars, setBars] = useState<DailyBar[] | null>(null)
   const [panels, setPanels] = useState<Record<string, PushPanel>>({})
   const [fundamentals, setFundamentals] = useState<Fundamentals | null | undefined>(undefined)
+  const [scorecards, setScorecards] = useState<Scorecards | null | undefined>(undefined)
 
   useEffect(() => {
     void window.api.getQuote(ticker).then(setQuote)
@@ -71,6 +74,11 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
       .getFundamentals(ticker)
       .then(setFundamentals)
       .catch(() => setFundamentals(null))
+    setScorecards(undefined)
+    void window.api
+      .getScorecards(ticker)
+      .then(setScorecards)
+      .catch(() => setScorecards(null))
   }, [ticker])
 
   // Seed from any persisted panels (the last dossier) so the window isn't blank
@@ -110,6 +118,15 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
         </Panel>
         <Panel title="Key stats">
           <KeyStats quote={quote} bars={bars} fundamentals={fundamentals} />
+        </Panel>
+        <Panel title="Scorecards">
+          {scorecards === undefined ? (
+            <Loading />
+          ) : scorecards === null || scorecards.cards.length === 0 ? (
+            <Empty msg="No scorecard data" />
+          ) : (
+            <ScorecardGrid data={scorecards} />
+          )}
         </Panel>
         <RecommendationCard panel={panels['recommendation']} />
         <SecSummaryCard panel={panels['sec-summary']} />
