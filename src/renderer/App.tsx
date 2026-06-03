@@ -10,6 +10,10 @@ import type {
   NewsData,
   NewsItem,
   NewsSentiment,
+  RisksData,
+  RiskCategory,
+  RiskSeverity,
+  DistressScreen,
   PriceTargets,
   AnalystCall,
   Fundamentals,
@@ -134,6 +138,7 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
         <RecommendationCard panel={panels['recommendation']} />
         <SecSummaryCard panel={panels['sec-summary']} />
         <NewsCard panel={panels['news']} />
+        <RisksCard panel={panels['risks']} />
       </div>
     </div>
   )
@@ -487,6 +492,101 @@ function SentimentPill({ sentiment }: { sentiment: NewsSentiment }): JSX.Element
   return (
     <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${s.cls}`}>
       {s.label}
+    </span>
+  )
+}
+
+// ── Risks & red flags ────────────────────────────────────────────────────────
+
+function RisksCard({ panel }: { panel: PushPanel | undefined }): JSX.Element {
+  const data = panel?.data as RisksData | undefined
+  return (
+    <Panel
+      title={panel?.title ?? 'Risks & red flags'}
+      meta={panel?.savedAt ? `researched ${fmtStamp(panel.savedAt)}` : undefined}
+    >
+      {data ? <Risks data={data} /> : <Loading label="Waiting for Claude…" />}
+    </Panel>
+  )
+}
+
+const SEVERITY_META: Record<RiskSeverity, { dots: number; label: string; cls: string }> = {
+  high: { dots: 3, label: 'high', cls: 'text-red-300' },
+  medium: { dots: 2, label: 'med', cls: 'text-amber-300' },
+  low: { dots: 1, label: 'low', cls: 'text-zinc-400' }
+}
+
+function Risks({ data }: { data: RisksData }): JSX.Element {
+  return (
+    <div>
+      {data.categories.length > 0 ? (
+        <div className="space-y-3">
+          {data.categories.map((c, i) => (
+            <RiskRow key={i} cat={c} />
+          ))}
+        </div>
+      ) : (
+        <Empty msg="No risks flagged" />
+      )}
+
+      {data.screens && data.screens.length > 0 && (
+        <>
+          <SubHead>Screens</SubHead>
+          <div className="flex flex-wrap gap-2">
+            {data.screens.map((s, i) => (
+              <ScreenChip key={i} screen={s} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {data.note && (
+        <div className="mt-4 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[12px] leading-relaxed text-amber-200/80">
+          {data.note}
+        </div>
+      )}
+
+      {data.asOf && <div className="mt-4 text-[11px] text-zinc-600">{data.asOf}</div>}
+    </div>
+  )
+}
+
+function RiskRow({ cat }: { cat: RiskCategory }): JSX.Element {
+  const sev = SEVERITY_META[cat.severity] ?? SEVERITY_META.low
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <span className="text-[12px] font-medium text-zinc-200">{cat.category}</span>
+        <span className="tracking-tight text-red-300">
+          {'●'.repeat(sev.dots)}
+          <span className="text-zinc-700">{'○'.repeat(3 - sev.dots)}</span>
+        </span>
+        <span className={`text-[10px] uppercase tracking-wide ${sev.cls}`}>{sev.label}</span>
+      </div>
+      <ul className="mt-1 space-y-0.5 text-[13px] text-zinc-300">
+        {cat.points.map((p, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="text-zinc-600">•</span>
+            <span>{p}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function ScreenChip({ screen }: { screen: DistressScreen }): JSX.Element {
+  const tone =
+    screen.tone === 'good'
+      ? 'text-emerald-300'
+      : screen.tone === 'bad'
+        ? 'text-red-300'
+        : 'text-zinc-200'
+  return (
+    <span className="rounded-md bg-zinc-800/60 px-2 py-1 text-[11px]">
+      <span className="text-zinc-500">{screen.label} </span>
+      <span className={`font-medium tabular-nums ${tone}`}>{screen.value}</span>
+      {screen.band && <span className="text-zinc-500"> ({screen.band})</span>}
     </span>
   )
 }
