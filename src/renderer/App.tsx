@@ -24,6 +24,7 @@ import type {
 import { ChartPanel } from './components/ChartPanel'
 import { ScorecardGrid } from './components/ScorecardPanel'
 import { ValuationPanel } from './components/ValuationPanel'
+import { ValueChainView } from './components/ValueChainView'
 
 export default function App(): JSX.Element {
   const [init, setInit] = useState<SurfaceInit | null>(null)
@@ -31,7 +32,11 @@ export default function App(): JSX.Element {
   useEffect(() => window.api.onInit(setInit), [])
 
   if (!init) return <Home />
-  return <Dashboard ticker={init.ticker} />
+  return init.kind === 'value-chain' ? (
+    <ValueChainView seed={init.ticker} />
+  ) : (
+    <Dashboard ticker={init.ticker} />
+  )
 }
 
 function Home(): JSX.Element {
