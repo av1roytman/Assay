@@ -112,7 +112,7 @@ export function computeValuation(
     return naResult(sym, asOf, 'Not applicable to funds.')
   }
   const { price, marketCap, freeCashflow } = research
-  if (!num(price) || !num(marketCap) || price <= 0) {
+  if (!num(price) || !num(marketCap) || price <= 0 || marketCap <= 0) {
     return naResult(sym, asOf, 'Insufficient data — no price or market cap.')
   }
   if (!num(freeCashflow) || freeCashflow <= 0) {
