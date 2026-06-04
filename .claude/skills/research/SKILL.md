@@ -15,6 +15,16 @@ Run a full research pass on a US-listed stock or ETF and render it live in the *
 4. The sub-agent returns the **slim `data` bundle** (≈600 tokens) plus confirmation it pushed the sec-summary. Using that bundle, **write and push the recommendation yourself** — see **Recommendation (you write this)** below.
 5. Relay to the user: confirm both panels rendered, and surface your recommendation **call + headline**. Don't re-paste the raw bundle.
 
+## Research discipline (applies to every panel you write)
+
+Distilled from market-research methodology. Apply as **behind-the-scenes reasoning discipline** — there is no citation UI; do not add a `sources` field. Five standards:
+
+1. **Source important claims.** A non-obvious market/competitive claim must be grounded in something you actually saw — the app-fetched `data` bundle, the sub-agent's news/risk inputs, or a search you ran — not asserted from memory. If you can't ground it, soften it or drop it.
+2. **Flag stale data.** When consensus, price targets, or figures predate a known newer event, say so in the panel's `note` / `asOf` (e.g. a "Strong Buy" consensus that predates a CEO-departure headline).
+3. **Weigh contrarian evidence.** Never write a one-sided thesis. The recommendation's `buyIf` / `avoidIf` carry the opposing case; the risks panel is the downside case. Steelman the other side.
+4. **Separate fact from inference.** Distinguish reported figures from your interpretation (e.g. "ROE 141%" is a fact; "that's a buyback artifact, not organic returns" is inference — label it).
+5. **Decide, don't summarize.** Every panel should make the user's decision easier, not restate data. End on a call or a clear "so what."
+
 ## Sub-agent prompt (substitute `<TICKER>`)
 
 > You are gathering data for **`<TICKER>`** and rendering the **SEC-summary** panel in the running Assay desktop app. You do **not** write the recommendation — the calling agent does that from the bundle you return.
@@ -79,6 +89,7 @@ Run a full research pass on a US-listed stock or ETF and render it live in the *
 > node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> news --title "News & catalysts" --data <temp.json>
 > ```
 > Do NOT send markdown for this type. Keep `why` to one tight line; set `sentiment` per item; use ISO dates (`YYYY-MM-DD`).
+> **Discipline:** include a headline only if it's material; set `sentiment` honestly (not optimistically); ground each `why` in the item itself; flag any stale or unconfirmed item in `note` rather than presenting it as settled.
 >
 > **`news` JSON shape:**
 > ```json
@@ -112,6 +123,7 @@ Run a full research pass on a US-listed stock or ETF and render it live in the *
 ## Recommendation (you, the main agent on Opus, write & push this)
 
 After the sub-agent returns, write the recommendation **yourself** from its `data` bundle — this is the judgment call, kept on the stronger model:
+- **Apply the Research discipline** (above): weigh contrarian evidence (the thesis must acknowledge the opposing case, with `buyIf` / `avoidIf` as the vehicle), separate fact from inference, and flag stale consensus/targets in `asOf` when a newer event is known.
 - **Call + thesis:** your own buy/hold/avoid with reasoning, `buyIf`, `avoidIf`. Apply a **consistent valuation discipline across tickers** (e.g. forward P/E vs growth — the cross-ticker consistency is the main reason this lives on Opus, not the sub-agent). For non-USD filers, lean on currency-clean signals (forward P/E, margins, growth, price-vs-MA) and **ignore cross-currency ratios** like P/S.
 - **Reference the DCF when present:** the `data` bundle now carries `valuation` (an app-computed 2-stage DCF). When `valuation.applicable` is true, weave its read into your thesis — e.g. "trades ~20% below a ~$X DCF fair value (margin of safety +20%)" or "priced for demanding ~18%/yr FCF growth (reverse DCF)". Treat it as **one input among many, not a mechanical buy/sell trigger**, and respect its caveats (FCFE approximation, single TTM FCF base; unreliable for financials). When `valuation.applicable` is false, ignore it. The Valuation panel renders itself — you do **not** push it.
 - **`street`** maps from `data.analyst`: `rating`, `score`, `analysts: count`, `targets: { current: data.price, low: targetLow, mean: targetMean, median: targetMedian, high: targetHigh }`.
@@ -144,6 +156,7 @@ After the sub-agent returns, write the recommendation **yourself** from its `dat
 ## Risks (you, the main agent on Opus, write & push this)
 
 After the sub-agent returns, write the `risks` panel **yourself** from its risk-input notes + the `data` bundle + SEC figures — the severity judgment stays on the stronger model:
+- **Apply the Research discipline** (above): every risk point should be grounded in the bundle/filing/news inputs (not asserted), and you should separate reported facts from your inference when stating a point. Note unconfirmed or stale items rather than presenting them as settled.
 - **Categories:** group risks under labels like Financial / Competitive / Regulatory / Macro / Operational. Each gets a `severity` (`high` | `medium` | `low`) and tight bullet `points`.
 - **Screens (optional):** include a `screens` strip **only with what the bundle already supports** — e.g. FCF coverage (`freeCashflow` vs `totalDebt`/interest), net-debt read (`totalDebt − totalCash`), accruals sign (`operatingCashflow` vs `netIncome`), current ratio. Add a full **Altman Z only if** its inputs are present. Do **NOT** make extra MCP calls to populate named academic scores (Piotroski-F, Beneish-M); omit what you can't compute cheaply.
 - **`note`:** always frame screens as **structural signals, not a return/performance forecast.**
