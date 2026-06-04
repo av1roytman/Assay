@@ -146,8 +146,12 @@ async function handle(req: IncomingMessage, res: ServerResponse, cb: ControlCall
       send(res, 400, { ok: false, error: 'ticker required' })
       return
     }
-    const { lastGeneratedAt, nodeCount } = cb.onValueChainOpen(ticker)
-    send(res, 200, { ok: true, ticker, lastGeneratedAt, nodeCount })
+    try {
+      const { lastGeneratedAt, nodeCount } = cb.onValueChainOpen(ticker)
+      send(res, 200, { ok: true, ticker, lastGeneratedAt, nodeCount })
+    } catch (e) {
+      send(res, 500, { ok: false, error: e instanceof Error ? e.message : 'open failed' })
+    }
     return
   }
 
@@ -159,13 +163,17 @@ async function handle(req: IncomingMessage, res: ServerResponse, cb: ControlCall
       send(res, 400, { ok: false, error: 'seed, entities[], edges[] required' })
       return
     }
-    const delivered = cb.onValueChainPush({
-      seed,
-      entities,
-      edges,
-      generatedAt: typeof payload.generatedAt === 'number' ? payload.generatedAt : Date.now()
-    } as VcPushPayload)
-    send(res, 200, { ok: true, delivered })
+    try {
+      const delivered = cb.onValueChainPush({
+        seed,
+        entities,
+        edges,
+        generatedAt: typeof payload.generatedAt === 'number' ? payload.generatedAt : Date.now()
+      } as VcPushPayload)
+      send(res, 200, { ok: true, delivered })
+    } catch (e) {
+      send(res, 500, { ok: false, error: e instanceof Error ? e.message : 'push failed' })
+    }
     return
   }
 
