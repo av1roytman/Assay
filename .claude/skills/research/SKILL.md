@@ -89,6 +89,7 @@ Distilled from market-research methodology. Apply as **behind-the-scenes reasoni
 > node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> news --title "News & catalysts" --data <temp.json>
 > ```
 > Do NOT send markdown for this type. Keep `why` to one tight line; set `sentiment` per item; use ISO dates (`YYYY-MM-DD`).
+> **Discipline:** include a headline only if it's material; set `sentiment` honestly (not optimistically); ground each `why` in the item itself; flag any stale or unconfirmed item in `note` rather than presenting it as settled.
 >
 > **`news` JSON shape:**
 > ```json
