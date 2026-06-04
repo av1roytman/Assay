@@ -15,6 +15,16 @@ Run a full research pass on a US-listed stock or ETF and render it live in the *
 4. The sub-agent returns the **slim `data` bundle** (≈600 tokens) plus confirmation it pushed the sec-summary. Using that bundle, **write and push the recommendation yourself** — see **Recommendation (you write this)** below.
 5. Relay to the user: confirm both panels rendered, and surface your recommendation **call + headline**. Don't re-paste the raw bundle.
 
+## Research discipline (applies to every panel you write)
+
+Distilled from market-research methodology. Apply as **behind-the-scenes reasoning discipline** — there is no citation UI; do not add a `sources` field. Five standards:
+
+1. **Source important claims.** A non-obvious market/competitive claim must be grounded in something you actually saw — the app-fetched `data` bundle, the sub-agent's news/risk inputs, or a search you ran — not asserted from memory. If you can't ground it, soften it or drop it.
+2. **Flag stale data.** When consensus, price targets, or figures predate a known newer event, say so in the panel's `note` / `asOf` (e.g. a "Strong Buy" consensus that predates a CEO-departure headline).
+3. **Weigh contrarian evidence.** Never write a one-sided thesis. The recommendation's `buyIf` / `avoidIf` carry the opposing case; the risks panel is the downside case. Steelman the other side.
+4. **Separate fact from inference.** Distinguish reported figures from your interpretation (e.g. "ROE 141%" is a fact; "that's a buyback artifact, not organic returns" is inference — label it).
+5. **Decide, don't summarize.** Every panel should make the user's decision easier, not restate data. End on a call or a clear "so what."
+
 ## Sub-agent prompt (substitute `<TICKER>`)
 
 > You are gathering data for **`<TICKER>`** and rendering the **SEC-summary** panel in the running Assay desktop app. You do **not** write the recommendation — the calling agent does that from the bundle you return.
