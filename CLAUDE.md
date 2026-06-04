@@ -60,6 +60,7 @@ You: "/research AAPL" in Claude Code
 | Key stats & quote | App | Stooq + Yahoo |
 | Earnings / notable dates | App | Yahoo calendar |
 | Rule scorecards (Value/Growth/Dividend/Technical) | App | computed from SEC EDGAR + Yahoo |
+| Valuation (DCF intrinsic value) | App | computed from Yahoo FCF + beta |
 | Analyst consensus (½ of recommendation) | App | Yahoo estimates |
 | SEC filings summary | Claude | EDGAR via WebFetch/MCP |
 | Recommendation thesis (½) | Claude | reasoning |
@@ -113,6 +114,7 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 - [ ] Analyst-consensus data (Yahoo) shown beside Claude's thesis
 - [x] News & catalysts panel — Claude-pushed (`NewsData`); Sonnet sub-agent gathers (yfinance news + WebSearch) & pushes. See [spec](docs/superpowers/specs/2026-06-03-news-risks-panels-design.md)
 - [x] Risks / red flags panel — Claude-pushed (`RisksData`); main Opus agent writes (categorized + optional structural screens). Same spec
+- [x] DCF valuation panel — app-owned, app-computed 2-stage equity DCF + reverse-DCF check (pure `dcf.ts` engine, vitest-tested → `valuationService.ts` → `stocks:valuation` IPC → `ValuationPanel`); also feeds `valuation` into the `/research` data bundle so the recommendation references it. See [spec](docs/superpowers/specs/2026-06-03-dcf-valuation-panel-design.md)
 - [ ] Peer comparison (Claude picks peers → app fetches their metrics)
 
 ### v3 — the value chain + polish

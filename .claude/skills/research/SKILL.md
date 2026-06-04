@@ -36,6 +36,7 @@ Run a full research pass on a US-listed stock or ETF and render it live in the *
 > - **Trajectory:** `totalRevenue` (TTM), `revenueGrowth`, `earningsGrowth`, `grossMargins`, `operatingMargins`, `profitMargins`, `returnOnEquity`, `freeCashflow`, `operatingCashflow`, `totalCash`, `totalDebt` — growth/margins are **fractions** (0.166 = +16.6%), TTM/MRQ.
 > - **`analyst`:** `rating`, `score` (1 = strong buy … 5 = sell), `count`, `targetLow/Mean/Median/High`. May be thin: `rating` can be `"none"` and `score` absent for lightly-covered names.
 > - **`sec`:** latest `filing` (`form`/`period`/`filed`/`accession`) + `revenue`, `netIncome`, `operatingIncome`, `grossProfit`, `epsDiluted` — each picked from that filing's own accession (context-clean, **native XBRL signs** — a loss stays negative) — plus `business`/`sector`/`industry`.
+> - **`valuation`:** app-computed 2-stage DCF — `applicable`, and when true `fairValue`, `fairValueLow/High`, `marginOfSafety`, `verdict`, `impliedGrowth`. Pass it through verbatim; the caller uses it for the recommendation.
 >
 > Call MCP **only** to fill a genuine gap:
 > - `data.sec` is `null` or missing figures you need → `mcp__sec-edgar__get_financials` / `mcp__sec-edgar__get_recent_filings` with **`identifier`**.
@@ -112,6 +113,7 @@ Run a full research pass on a US-listed stock or ETF and render it live in the *
 
 After the sub-agent returns, write the recommendation **yourself** from its `data` bundle — this is the judgment call, kept on the stronger model:
 - **Call + thesis:** your own buy/hold/avoid with reasoning, `buyIf`, `avoidIf`. Apply a **consistent valuation discipline across tickers** (e.g. forward P/E vs growth — the cross-ticker consistency is the main reason this lives on Opus, not the sub-agent). For non-USD filers, lean on currency-clean signals (forward P/E, margins, growth, price-vs-MA) and **ignore cross-currency ratios** like P/S.
+- **Reference the DCF when present:** the `data` bundle now carries `valuation` (an app-computed 2-stage DCF). When `valuation.applicable` is true, weave its read into your thesis — e.g. "trades ~20% below a ~$X DCF fair value (margin of safety +20%)" or "priced for demanding ~18%/yr FCF growth (reverse DCF)". Treat it as **one input among many, not a mechanical buy/sell trigger**, and respect its caveats (FCFE approximation, single TTM FCF base; unreliable for financials). When `valuation.applicable` is false, ignore it. The Valuation panel renders itself — you do **not** push it.
 - **`street`** maps from `data.analyst`: `rating`, `score`, `analysts: count`, `targets: { current: data.price, low: targetLow, mean: targetMean, median: targetMedian, high: targetHigh }`.
   - **Thin / absent coverage:** if `rating` is `"none"` or `score` is missing, **omit `score`** and set `rating` to a plain-language label like `"Thin coverage (3 analysts, no consensus rating)"`. Note when the price already sits above the mean target.
 - Write the JSON to a temp file and push (then delete the temp file):

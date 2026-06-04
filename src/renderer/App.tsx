@@ -17,10 +17,12 @@ import type {
   PriceTargets,
   AnalystCall,
   Fundamentals,
-  Scorecards
+  Scorecards,
+  ValuationData
 } from '../shared/types'
 import { ChartPanel } from './components/ChartPanel'
 import { ScorecardGrid } from './components/ScorecardPanel'
+import { ValuationPanel } from './components/ValuationPanel'
 
 export default function App(): JSX.Element {
   const [ticker, setTicker] = useState<string | null>(null)
@@ -72,6 +74,7 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
   const [panels, setPanels] = useState<Record<string, PushPanel>>({})
   const [fundamentals, setFundamentals] = useState<Fundamentals | null | undefined>(undefined)
   const [scorecards, setScorecards] = useState<Scorecards | null | undefined>(undefined)
+  const [valuation, setValuation] = useState<ValuationData | null | undefined>(undefined)
 
   useEffect(() => {
     void window.api.getQuote(ticker).then(setQuote)
@@ -86,6 +89,11 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
       .getScorecards(ticker)
       .then(setScorecards)
       .catch(() => setScorecards(null))
+    setValuation(undefined)
+    void window.api
+      .getValuation(ticker)
+      .then(setValuation)
+      .catch(() => setValuation(null))
   }, [ticker])
 
   // Seed from any persisted panels (the last dossier) so the window isn't blank
@@ -133,6 +141,15 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
             <Empty msg="No scorecard data" />
           ) : (
             <ScorecardGrid data={scorecards} />
+          )}
+        </Panel>
+        <Panel title="Valuation (DCF)">
+          {valuation === undefined ? (
+            <Loading />
+          ) : valuation === null ? (
+            <Empty msg="No valuation data" />
+          ) : (
+            <ValuationPanel data={valuation} />
           )}
         </Panel>
         <RecommendationCard panel={panels['recommendation']} />

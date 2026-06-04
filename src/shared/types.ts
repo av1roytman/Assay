@@ -136,6 +136,33 @@ export interface EtfData {
   sectorWeights?: { sector: string; weight: number }[] // weight as fraction
 }
 
+// ── DCF valuation (app-owned, computed in main from Yahoo) ───────────────────
+
+export interface DcfAssumption {
+  label: string // "Stage-1 growth (5yr)", "Discount rate (CAPM)", …
+  value: string // pre-formatted: "12.0%", "9.8%", "$98.5B"
+}
+
+export type ValuationVerdict = 'undervalued' | 'fair' | 'overvalued'
+
+export interface ValuationData {
+  symbol: string
+  applicable: boolean
+  reason?: string // set when applicable === false (e.g. "Not applicable to funds.")
+  // Present only when applicable === true:
+  fairValue?: number // center case, per share
+  fairValueLow?: number // sensitivity band min
+  fairValueHigh?: number // sensitivity band max
+  price?: number // current, for comparison
+  marginOfSafety?: number // fraction; (fairValue − price) / price
+  verdict?: ValuationVerdict
+  impliedGrowth?: number // reverse-DCF g1, fraction
+  impliedGrowthRead?: string // "demanding" | "undemanding" | "in line"
+  assumptions?: DcfAssumption[]
+  note: string // methodology caveat — always present
+  asOf: string // ISO timestamp
+}
+
 export interface SecSummaryData {
   business: string // what the company does
   filing?: { form: string; period?: string; filed?: string }
@@ -287,6 +314,7 @@ export interface SecData {
 export interface ResearchData extends YahooResearch {
   symbol: string
   sec?: SecData | null
+  valuation?: ValuationData | null
 }
 
 // The typed surface exposed on `window.api` via the preload bridge.
@@ -297,6 +325,7 @@ export interface AssayApi {
   getIntradayHistory(symbol: string, interval: string, range: string): Promise<IntradayBar[]>
   getFundamentals(symbol: string): Promise<Fundamentals | null>
   getScorecards(symbol: string): Promise<Scorecards | null>
+  getValuation(symbol: string): Promise<ValuationData | null>
   getHistory(): Promise<HistoryEntry[]>
   // Persisted panels (the last dossier) for a ticker — newest content per type.
   getPanels(symbol: string): Promise<PushPanel[]>
