@@ -118,7 +118,7 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 - [ ] Peer comparison (Claude picks peers → app fetches their metrics)
 
 ### v3 — the value chain + polish
-- [ ] Value-chain **node graph** (graph lib, e.g. React Flow) — Claude supplies entities/edges
+- [x] Value-chain **node graph** — standalone `/value-chain` skill + dedicated radial-graph window (React Flow + d3-force); Claude pushes entities/edges (hybrid sources + confidence), app dedups/persists (migration v4: `vc_entities`/`vc_edges`/`vc_generations`) & renders an accreting cross-company map; 30-day freshness cache. See [spec](docs/superpowers/specs/2026-06-03-value-chain-map-design.md)
 - [ ] Reopen-from-history, window tabs option, settings, electron-builder packaging
 - [x] Persist pushed panels to `assay.db` (migration v3, `panels` table; one row per ticker+type, upserted with `created_at`). Windows reload the last dossier with its date on open ([panels.ts](src/main/database/panels.ts), `getPanels` IPC); fresh pushes overwrite by `savedAt`. ("save full dossiers")
 
