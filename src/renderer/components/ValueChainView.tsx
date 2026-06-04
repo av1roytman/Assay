@@ -78,7 +78,12 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
 
   useEffect(() => {
     setGraph(undefined)
-    void window.api.getValueChain(seed).then(setGraph)
+    setCollapsed(new Set())
+    setSelected(null)
+    void window.api
+      .getValueChain(seed)
+      .then(setGraph)
+      .catch(() => setGraph(null))
   }, [seed])
 
   useEffect(
@@ -87,7 +92,10 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
   )
 
   const seedId = useMemo(
-    () => graph?.nodes.find((n) => n.ticker === seed.toUpperCase())?.id ?? null,
+    () =>
+      graph?.nodes.find(
+        (n) => n.ticker === seed.toUpperCase() || n.name.toUpperCase() === seed.toUpperCase()
+      )?.id ?? null,
     [graph, seed]
   )
 
@@ -139,12 +147,12 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
       position: pos.get(n.id) ?? { x: 0, y: 0 },
       data: { node: n, isSeed: n.id === seedId, collapsed: collapsed.has(n.id), onToggle: toggle, onSelect: setSelected }
     }))
-  }, [visNodes, visEdges, seedId, seed, graph, collapsed, toggle])
+  }, [visNodes, visEdges, seedId, seed, graph?.lastGeneratedAt, collapsed, toggle])
 
   const flowEdges: Edge[] = useMemo(
     () =>
-      visEdges.map((e, i) => ({
-        id: `e${i}`,
+      visEdges.map((e) => ({
+        id: `${e.source}-${e.target}-${e.relation}`,
         source: String(e.source),
         target: String(e.target),
         style: {
