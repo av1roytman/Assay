@@ -155,6 +155,7 @@ After the sub-agent returns, write the recommendation **yourself** from its `dat
 ## Risks (you, the main agent on Opus, write & push this)
 
 After the sub-agent returns, write the `risks` panel **yourself** from its risk-input notes + the `data` bundle + SEC figures — the severity judgment stays on the stronger model:
+- **Apply the Research discipline** (above): every risk point should be grounded in the bundle/filing/news inputs (not asserted), and you should separate reported facts from your inference when stating a point. Note unconfirmed or stale items rather than presenting them as settled.
 - **Categories:** group risks under labels like Financial / Competitive / Regulatory / Macro / Operational. Each gets a `severity` (`high` | `medium` | `low`) and tight bullet `points`.
 - **Screens (optional):** include a `screens` strip **only with what the bundle already supports** — e.g. FCF coverage (`freeCashflow` vs `totalDebt`/interest), net-debt read (`totalDebt − totalCash`), accruals sign (`operatingCashflow` vs `netIncome`), current ratio. Add a full **Altman Z only if** its inputs are present. Do **NOT** make extra MCP calls to populate named academic scores (Piotroski-F, Beneish-M); omit what you can't compute cheaply.
 - **`note`:** always frame screens as **structural signals, not a return/performance forecast.**
