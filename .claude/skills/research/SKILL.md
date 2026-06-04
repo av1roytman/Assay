@@ -9,6 +9,12 @@ Run a full research pass on a US-listed stock or ETF and render it live in the *
 
 ## How to run this (orchestration — you, the main agent)
 
+0. **Ensure the Assay app is running — do this yourself, before spawning the sub-agent.** The dev server must be owned by *you* (the long-lived session), not the sub-agent: a sub-agent that launches it has the server die when it returns, so your later recommendation/risks pushes fail. Steps:
+   - Run `node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs health`. **Exit 0 = already running → skip the rest of step 0.**
+   - If not running (exit 1), start the dev server with the **Bash tool using `run_in_background: true`** so the harness keeps it alive across turns:
+     - command: `npm run dev` · cwd: `C:/Users/Avi/Desktop/Developer/Assay`
+     - ⚠ **Never** set `NODE_OPTIONS=--use-system-ca` for this — Electron aborts at launch (exit 9). Dev/build don't need it; only `npm install` does.
+   - Then block until it's healthy: run `node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs wait` (polls `/health` up to 90s, no second launch). Cold start can take 20–40s. If it exits non-zero, surface that to the user and stop — don't dispatch the sub-agent into a dead app.
 1. Coverage is **US-listed stocks & ETFs only.** NYSE/Nasdaq-listed **ADRs of foreign companies count** (they have a US ticker plus Yahoo/SEC data — e.g. ASX = ASE Technology, TSM, BABA). Out of scope and stop: tickers **not listed on a US exchange**, crypto, and forex. If unsure whether a ticker is US-listed, proceed — the data fetch will fail cleanly if it isn't.
 2. Spawn **one** sub-agent via the **Agent** tool with **`subagent_type: "general-purpose"` and `model: "sonnet"`**, passing the **Sub-agent prompt** below with `<TICKER>` substituted. (Do **not** use `run_in_background` — you need its return value to write the recommendation.)
 3. **Wait passively.** Do NOT run `echo`/`sleep`/poll filler — the harness re-invokes you when the sub-agent returns. (Global no-polling rule is in memory.)
@@ -33,9 +39,8 @@ Distilled from market-research methodology. Apply as **behind-the-scenes reasoni
 >
 > Helper CLI: `node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs <cmd>`
 >
-> **1. Ensure the app and open the window:**
+> **1. Open the window.** The caller has already started and health-checked the app, so do **not** launch it — just open the ticker window:
 > ```
-> node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs ensure
 > node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs research <TICKER>
 > ```
 > The app self-renders the price chart and key stats — do NOT duplicate that.
