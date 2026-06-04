@@ -4,6 +4,7 @@
 //
 //   node scripts/assay.mjs health                 -> exit 0 if app is up
 //   node scripts/assay.mjs ensure                 -> launch app if down, wait for ready
+//   node scripts/assay.mjs wait                    -> poll /health until ready (no launch)
 //   node scripts/assay.mjs research AAPL          -> open/focus the AAPL window
 //   node scripts/assay.mjs panel AAPL recommendation --title "Call" --data rec.json
 //   node scripts/assay.mjs panel AAPL sec-summary --title "SEC Summary" --file out.md
@@ -92,6 +93,20 @@ if (cmd === 'health') {
   }
   console.error(`Assay did not become ready in 90s. Try \`npm run dev\` manually in ${APP_DIR}.`)
   process.exit(1)
+} else if (cmd === 'wait') {
+  // Poll /health until ready, but never launch. Use after starting `npm run dev`
+  // as a harness background process so the dev server is owned by the long-lived
+  // session, not a child that dies when its launcher exits.
+  const deadline = Date.now() + 90_000
+  while (Date.now() < deadline) {
+    if (await isHealthy()) {
+      console.log('Assay is ready.')
+      process.exit(0)
+    }
+    await new Promise((r) => setTimeout(r, 2500))
+  }
+  console.error('Assay did not become ready in 90s. Is `npm run dev` running?')
+  process.exit(1)
 } else if (cmd === 'research') {
   const ticker = rest[0]
   if (!ticker) {
@@ -125,6 +140,6 @@ if (cmd === 'health') {
     console.log(await post('/panel', { ticker, type, title: flag('--title'), markdown }))
   }
 } else {
-  console.error('commands: health | ensure | research <T> | panel <T> <type> [--title][--file]')
+  console.error('commands: health | ensure | wait | research <T> | panel <T> <type> [--title][--file]')
   process.exit(1)
 }
