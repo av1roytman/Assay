@@ -52,4 +52,43 @@ export const migrations: Migration[] = [
       `)
     }
   }
+  ,{
+    version: 4,
+    name: 'value-chain-graph',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS vc_entities (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          kind TEXT NOT NULL,
+          ticker TEXT UNIQUE,
+          name TEXT NOT NULL,
+          normalized_name TEXT NOT NULL,
+          aliases TEXT,
+          description TEXT,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS vc_entities_norm
+          ON vc_entities(normalized_name) WHERE ticker IS NULL;
+        CREATE TABLE IF NOT EXISTS vc_edges (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source_id INTEGER NOT NULL REFERENCES vc_entities(id),
+          target_id INTEGER NOT NULL REFERENCES vc_entities(id),
+          relation TEXT NOT NULL,
+          confidence TEXT NOT NULL,
+          source_tag TEXT NOT NULL,
+          rationale TEXT,
+          seed_ticker TEXT NOT NULL,
+          generated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS vc_edges_seed ON vc_edges(seed_ticker);
+        CREATE INDEX IF NOT EXISTS vc_edges_source ON vc_edges(source_id);
+        CREATE INDEX IF NOT EXISTS vc_edges_target ON vc_edges(target_id);
+        CREATE TABLE IF NOT EXISTS vc_generations (
+          seed_ticker TEXT PRIMARY KEY,
+          generated_at INTEGER NOT NULL,
+          note TEXT
+        );
+      `)
+    }
+  }
 ]
