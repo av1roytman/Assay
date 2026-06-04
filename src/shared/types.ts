@@ -222,7 +222,9 @@ export interface RisksData {
   asOf?: string
 }
 
-export interface ResearchInit {
+// Tells a freshly-loaded window which surface it is and which ticker it owns.
+export interface SurfaceInit {
+  kind: 'research' | 'value-chain'
   ticker: string
 }
 
@@ -383,8 +385,12 @@ export interface AssayApi {
   getHistory(): Promise<HistoryEntry[]>
   // Persisted panels (the last dossier) for a ticker — newest content per type.
   getPanels(symbol: string): Promise<PushPanel[]>
-  // Subscribe to "this window is for ticker X". Returns an unsubscribe fn.
-  onInit(cb: (init: ResearchInit) => void): () => void
+  // Subscribe to "this window is surface S for ticker X". Returns an unsubscribe fn.
+  onInit(cb: (init: SurfaceInit) => void): () => void
+  // Read the stored value-chain graph reachable from a seed ticker.
+  getValueChain(seed: string): Promise<VcGraph | null>
+  // Subscribe to value-chain graph pushes. Returns an unsubscribe fn.
+  onValueChain(cb: (graph: VcGraph) => void): () => void
   // Subscribe to panels pushed by Claude. Returns an unsubscribe fn.
   onPanel(cb: (panel: PushPanel) => void): () => void
 }

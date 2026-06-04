@@ -9,7 +9,8 @@ import type {
   ValuationData,
   HistoryEntry,
   PushPanel,
-  ResearchInit
+  SurfaceInit,
+  VcGraph
 } from '../shared/types'
 
 const api: AssayApi = {
@@ -27,10 +28,17 @@ const api: AssayApi = {
     ipcRenderer.invoke('stocks:valuation', symbol),
   getHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke('history:list'),
   getPanels: (symbol: string): Promise<PushPanel[]> => ipcRenderer.invoke('panels:get', symbol),
-  onInit: (cb: (init: ResearchInit) => void): (() => void) => {
-    const handler = (_e: IpcRendererEvent, init: ResearchInit): void => cb(init)
+  onInit: (cb: (init: SurfaceInit) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, init: SurfaceInit): void => cb(init)
     ipcRenderer.on('research:init', handler)
     return () => ipcRenderer.removeListener('research:init', handler)
+  },
+  getValueChain: (seed: string): Promise<VcGraph | null> =>
+    ipcRenderer.invoke('valuechain:get', seed),
+  onValueChain: (cb: (graph: VcGraph) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, graph: VcGraph): void => cb(graph)
+    ipcRenderer.on('value-chain:update', handler)
+    return () => ipcRenderer.removeListener('value-chain:update', handler)
   },
   onPanel: (cb: (panel: PushPanel) => void): (() => void) => {
     const handler = (_e: IpcRendererEvent, panel: PushPanel): void => cb(panel)
