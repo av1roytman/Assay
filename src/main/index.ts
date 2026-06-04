@@ -7,6 +7,7 @@ import { recordResearch } from './database/history'
 import { savePanel } from './database/panels'
 import { getResearchData } from './services/yahooService'
 import { getSecData } from './services/secService'
+import { computeValuation } from './services/dcf'
 
 // Single instance: all research windows live in one process so the control
 // server and DB are shared. A second launch just focuses the home window.
@@ -30,7 +31,8 @@ if (!gotLock) {
       },
       onData: async (ticker) => {
         const [yahoo, sec] = await Promise.all([getResearchData(ticker), getSecData(ticker)])
-        return { symbol: ticker, ...(yahoo ?? {}), sec }
+        const valuation = computeValuation(yahoo ?? null, ticker, new Date().toISOString())
+        return { symbol: ticker, ...(yahoo ?? {}), sec, valuation }
       }
     })
     createHomeWindow()
