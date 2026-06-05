@@ -18,13 +18,16 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import type { VcGraph, VcNode, VcEdge, VcRelation, VcConfidence } from '../../shared/types'
-import { computeColumnLayout } from './vcLayout'
+import { computeColumnLayout, computePeerCounts } from './vcLayout'
 
 const RELATION_COLOR: Record<VcRelation, string> = {
   supplier: '#38bdf8', // sky
   customer: '#34d399', // emerald
   competitor: '#fbbf24' // amber
 }
+// Seed node gets a neutral near-white outline so it reads as the focus, distinct
+// from the supplier/customer/competitor role colors above.
+const SEED_COLOR = '#fafafa'
 // Confidence drives both stroke weight and opacity so high-trust edges read as
 // solid + bold and low-trust ones as faint + dashed.
 const EDGE_WIDTH: Record<VcConfidence, number> = { high: 2.4, medium: 1.6, low: 1 }
@@ -39,31 +42,54 @@ interface NodeData {
   isSeed: boolean
   isSelected: boolean
   hub: HubState
+  roleColor?: string // node outline/hue by relation to seed (seed/supplier/customer/competitor)
+  peerCount?: number // # of peers (seed + competitors) sharing this supplier/customer (shared view)
+  isUngatheredPeer?: boolean // a competitor peer with no stored chain yet
   onToggle: (id: number) => void
 }
 
 function VcCard({ data }: NodeProps<NodeData>): JSX.Element {
-  const { node, isSeed, isSelected, hub, onToggle } = data
-  const ring = isSeed
-    ? 'ring-2 ring-emerald-400'
-    : isSelected
-      ? 'ring-2 ring-sky-400'
-      : 'ring-1 ring-zinc-700'
+  const { node, isSelected, hub, roleColor, peerCount, isUngatheredPeer, onToggle } = data
   const border = node.kind === 'segment' ? 'border-dashed' : 'border-solid'
+  const shared = peerCount != null && peerCount >= 2
   return (
-    <div className={`w-44 rounded-lg border ${border} border-zinc-700 bg-zinc-900/90 px-3 py-2 ${ring}`}>
+    <div
+      className={`w-44 rounded-lg border-2 ${border} bg-zinc-900/95 px-3 py-2 ${isSelected ? 'ring-2 ring-zinc-100' : ''}`}
+      style={{
+        borderColor: roleColor ?? '#3f3f46',
+        boxShadow: roleColor ? `inset 0 0 16px -8px ${roleColor}` : undefined
+      }}
+    >
       <Handle type="target" position={Position.Left} className="!bg-zinc-600" />
       <Handle type="source" position={Position.Right} className="!bg-zinc-600" />
       <div className="flex items-center justify-between gap-2">
         <span className="truncate text-[13px] font-semibold text-zinc-100">{node.name}</span>
-        {node.ticker && (
-          <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
-            {node.ticker}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {shared && (
+            <span
+              className="rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300"
+              title={`Shared by ${peerCount} peers`}
+            >
+              {peerCount} peers
+            </span>
+          )}
+          {node.ticker && (
+            <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
+              {node.ticker}
+            </span>
+          )}
+        </div>
       </div>
       {node.description && (
         <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-zinc-500">{node.description}</div>
+      )}
+      {isUngatheredPeer && (
+        <div
+          className="mt-1 text-[10px] font-medium text-zinc-500"
+          title={`Run /value-chain ${node.ticker} to map this peer's chain`}
+        >
+          no chain yet · /value-chain {node.ticker}
+        </div>
       )}
       {hub !== 'none' && (
         <button
@@ -182,6 +208,11 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
     customer: true,
     competitor: true
   })
+  // Shared-ecosystem view: pull the seed's direct competitors onto the canvas as
+  // peers so any supplier/customer they share with the seed renders as one
+  // fan-out node (with an "N peers" badge). Off by default — keeps the everyday
+  // seed-centric view uncluttered.
+  const [showShared, setShowShared] = useState(false)
   // User drag positions, layered on top of the auto column layout. Survives
   // collapse/expand and filter changes; "Reset layout" clears it.
   const [userPos, setUserPos] = useState<Map<number, { x: number; y: number }>>(new Map())
@@ -193,6 +224,7 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
     setSelected(null)
     setUserPos(new Map())
     setPinnedEdges(new Set())
+    setShowShared(false)
     void window.api
       .getValueChain(seed)
       .then(setGraph)
@@ -228,13 +260,17 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
   // The supplier/customer subgraph that the column layout draws (competitors removed).
   const flow = useMemo(() => {
     if (!graph) return { nodes: [] as VcNode[], edges: [] as VcEdge[] }
-    const nodes = graph.nodes.filter((n) => !competitorIds.has(n.id))
+    // Shared view keeps competitors on the canvas; the default view strips them
+    // (they live in the top strip). Either way the column flow carries only
+    // supplier/customer edges — competitor edges never belong on the
+    // supplier→customer axis (they'd skew the column BFS).
+    const nodes = showShared ? graph.nodes : graph.nodes.filter((n) => !competitorIds.has(n.id))
     const keep = new Set(nodes.map((n) => n.id))
     const edges = graph.edges.filter(
       (e) => e.relation !== 'competitor' && keep.has(e.source) && keep.has(e.target)
     )
     return { nodes, edges }
-  }, [graph, competitorIds])
+  }, [graph, competitorIds, showShared])
 
   // Visible set: seed + its 1-hop neighbors (subject to relation filters); any
   // expanded hub that is itself visible reveals its own neighbors too.
@@ -247,8 +283,13 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
       edgesByNode.get(e.source)!.push(e)
       edgesByNode.get(e.target)!.push(e)
     }
+    // In the shared view the seed's competitors are visible peers AND act as
+    // hubs, so their own 1-hop suppliers/customers reveal — that's what exposes a
+    // supplier/customer shared between the seed and a peer.
     const visible = new Set<number>([seedId])
-    const isHub = (id: number): boolean => id === seedId || expanded.has(id)
+    if (showShared) for (const id of competitorIds) visible.add(id)
+    const isHub = (id: number): boolean =>
+      id === seedId || expanded.has(id) || (showShared && competitorIds.has(id))
     let changed = true
     while (changed) {
       changed = false
@@ -272,12 +313,34 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
       (e) => visible.has(e.source) && visible.has(e.target) && relFilter[e.relation]
     )
     return { visNodeList, visEdgeList }
-  }, [flow, seedId, expanded, relFilter])
+  }, [flow, seedId, expanded, relFilter, showShared, competitorIds])
 
   const basePos = useMemo(
     () => computeColumnLayout(seedId ?? 0, visNodeList, visEdgeList),
     [seedId, visNodeList, visEdgeList]
   )
+
+  // Outline/hue color per node by its role relative to the seed: the seed itself
+  // (near-white), its direct competitors (amber), and supplier/customer nodes
+  // (sky/emerald, matching the edge palette). Drives the card border + inner hue.
+  const nodeRoleColor = useMemo(() => {
+    const m = new Map<number, string>()
+    if (!graph || seedId == null) return m
+    m.set(seedId, SEED_COLOR)
+    for (const id of competitorIds) if (!m.has(id)) m.set(id, RELATION_COLOR.competitor)
+    for (const e of graph.edges) {
+      if (e.relation === 'supplier' && !m.has(e.source)) m.set(e.source, RELATION_COLOR.supplier)
+      else if (e.relation === 'customer' && !m.has(e.target)) m.set(e.target, RELATION_COLOR.customer)
+    }
+    return m
+  }, [graph, seedId, competitorIds])
+
+  // How many peers (seed + its competitors) share each supplier/customer node —
+  // drives the "N peers" badge. ≥2 means the node is genuinely shared.
+  const peerCounts = useMemo(() => {
+    if (!showShared || seedId == null) return new Map<number, number>()
+    return computePeerCounts(new Set<number>([seedId, ...competitorIds]), visEdgeList)
+  }, [showShared, seedId, competitorIds, visEdgeList])
 
   const toggleExpand = useCallback((id: number) => {
     setExpanded((prev) => {
@@ -297,6 +360,16 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
     })
   }, [])
 
+  // Re-pull the stored graph for this seed (e.g. after another seed's gather
+  // merged new shared nodes into the store). Preserves view state — expand,
+  // drag, filters, the shared toggle — it only swaps in fresher data.
+  const refresh = useCallback(() => {
+    void window.api
+      .getValueChain(seed)
+      .then((g) => g && setGraph(g))
+      .catch(() => {})
+  }, [seed])
+
   const desiredNodes = useMemo<Node<NodeData>[]>(() => {
     if (seedId == null) return []
     return visNodeList.map((n) => ({
@@ -312,10 +385,13 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
             ? 'expanded'
             : 'collapsed'
           : 'none') as HubState,
+        roleColor: nodeRoleColor.get(n.id),
+        peerCount: peerCounts.get(n.id),
+        isUngatheredPeer: showShared && competitorIds.has(n.id) && !n.expandable && !!n.ticker,
         onToggle: toggleExpand
       }
     }))
-  }, [visNodeList, basePos, userPos, seedId, selected, expanded, toggleExpand])
+  }, [visNodeList, basePos, userPos, seedId, selected, expanded, toggleExpand, peerCounts, nodeRoleColor, showShared, competitorIds])
 
   const desiredEdges = useMemo<Edge<EdgeData>[]>(
     () =>
@@ -388,7 +464,7 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
 
   return (
     <div className="flex h-full w-full flex-col bg-zinc-950">
-      {relFilter.competitor && competitors.length > 0 && (
+      {!showShared && relFilter.competitor && competitors.length > 0 && (
         <CompetitorStrip competitors={competitors} selected={selected} onPick={(id) => setSelected(id)} />
       )}
       <div className="relative flex-1">
@@ -416,11 +492,14 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
         <Toolbar
           relFilter={relFilter}
           onToggleRelation={(r) => setRelFilter((p) => ({ ...p, [r]: !p[r] }))}
+          showShared={showShared}
+          onToggleShared={() => setShowShared((s) => !s)}
           hasDragged={userPos.size > 0}
           onResetLayout={() => setUserPos(new Map())}
           pinnedCount={pinnedEdges.size}
           onClearPins={() => setPinnedEdges(new Set())}
           onFit={() => rfRef.current?.fitView({ padding: 0.2, duration: 200 })}
+          onRefresh={refresh}
         />
         <Legend />
         {selectedNode && <Detail node={selectedNode} graph={graph} onClose={() => setSelected(null)} />}
@@ -434,19 +513,25 @@ export function ValueChainView({ seed }: { seed: string }): JSX.Element {
 function Toolbar({
   relFilter,
   onToggleRelation,
+  showShared,
+  onToggleShared,
   hasDragged,
   onResetLayout,
   pinnedCount,
   onClearPins,
-  onFit
+  onFit,
+  onRefresh
 }: {
   relFilter: RelationFilter
   onToggleRelation: (r: VcRelation) => void
+  showShared: boolean
+  onToggleShared: () => void
   hasDragged: boolean
   onResetLayout: () => void
   pinnedCount: number
   onClearPins: () => void
   onFit: () => void
+  onRefresh: () => void
 }): JSX.Element {
   const relations: VcRelation[] = ['supplier', 'customer', 'competitor']
   const labelOf: Record<VcRelation, string> = {
@@ -477,6 +562,21 @@ function Toolbar({
           </button>
         )
       })}
+      <button
+        onClick={onToggleShared}
+        className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+          showShared
+            ? 'border-amber-400/60 bg-amber-400/10 text-amber-200'
+            : 'border-zinc-800 bg-zinc-900/50 text-zinc-500'
+        }`}
+        title={
+          showShared
+            ? 'Hide shared ecosystem'
+            : 'Show shared ecosystem — competitors on canvas + suppliers/customers they share'
+        }
+      >
+        Shared ecosystem
+      </button>
       <span className="mx-0.5 h-4 w-px bg-zinc-800" />
       <button
         onClick={onFit}
@@ -484,6 +584,13 @@ function Toolbar({
         title="Fit graph to view"
       >
         Fit view
+      </button>
+      <button
+        onClick={onRefresh}
+        className="rounded-full border border-zinc-700 bg-zinc-900/90 px-2.5 py-1 text-[11px] font-medium text-zinc-300 hover:text-zinc-100"
+        title="Re-pull the latest stored graph (after new data was gathered elsewhere)"
+      >
+        Refresh
       </button>
       {hasDragged && (
         <button
@@ -550,12 +657,15 @@ function Legend(): JSX.Element {
   return (
     <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-zinc-800 bg-zinc-900/90 p-2 text-[10px] text-zinc-400">
       <div className="flex items-center gap-1.5">
-        <span className="inline-block h-0.5 w-4" style={{ background: RELATION_COLOR.supplier }} /> supplier →
+        <span className="inline-block h-2 w-2 rounded-sm" style={{ background: RELATION_COLOR.supplier }} /> supplier
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="inline-block h-0.5 w-4" style={{ background: RELATION_COLOR.customer }} /> → customer
+        <span className="inline-block h-2 w-2 rounded-sm" style={{ background: RELATION_COLOR.customer }} /> customer
       </div>
-      <div className="mt-1 border-t border-zinc-800 pt-1">thick/solid = high · medium = dim · thin/dashed = low</div>
+      <div className="flex items-center gap-1.5">
+        <span className="inline-block h-2 w-2 rounded-sm" style={{ background: RELATION_COLOR.competitor }} /> competitor
+      </div>
+      <div className="mt-1 border-t border-zinc-800 pt-1">node outline = role · edge = confidence</div>
     </div>
   )
 }
