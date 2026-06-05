@@ -122,6 +122,11 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 - [ ] Reopen-from-history, window tabs option, settings, electron-builder packaging
 - [x] Persist pushed panels to `assay.db` (migration v3, `panels` table; one row per ticker+type, upserted with `created_at`). Windows reload the last dossier with its date on open ([panels.ts](src/main/database/panels.ts), `getPanels` IPC); fresh pushes overwrite by `savedAt`. ("save full dossiers")
 
+### Backlog — UX & indicators (noted 2026-06-05)
+- [ ] **RSI indicator on the price chart** — add RSI (14) as a sub-pane on `ChartPanel` (lightweight-charts), alongside the existing MA/volume overlays. (RSI is already a Technical-scorecard metric; this surfaces it visually.)
+- [ ] **Acronym tooltips** — hover/tap tips explaining each metric acronym (P/E, EV/EBITDA, FCF yield, ROE/ROIC, PEG, P/B, P/S, RSI, DCF, margin-of-safety, …) across the Key Stats / scorecard / valuation panels, so the dashboard is legible without outside lookups.
+- [ ] **Earnings date & key upcoming events panel (exact dates)** — app-owned panel listing the next **earnings date** plus other dated catalysts (ex-dividend, splits, investor days) with **exact dates**, from the Yahoo calendar (`yahooService`). Supersedes the v1-deferred "earnings / notable-dates" line above.
+
 ### Out of scope (intentional)
 - [ ] Idea screening / discovery — bring-your-own-ticker
 - [ ] International stocks, crypto
