@@ -9,7 +9,7 @@ import { net } from 'electron'
 import type { SecData } from '../../shared/types'
 
 // SEC asks every client to send a descriptive User-Agent with contact info.
-const UA = 'Assay research app (contact: avi@ralfn.com)'
+const UA = 'Assay research app (https://github.com/av1roytman/Assay)'
 const TIMEOUT_MS = 10_000
 
 let tickerMap: Map<string, string> | null = null // upper ticker -> 10-digit CIK

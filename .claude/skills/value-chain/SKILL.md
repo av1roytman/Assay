@@ -17,8 +17,8 @@ exploration, not a financial assertion.
 2. **Freshness gate.** Run the open command — it opens/focuses the window (painting any cached graph)
    and reports freshness:
    ```
-   node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs ensure
-   node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs vc <TICKER>
+   node scripts/assay.mjs ensure
+   node scripts/assay.mjs vc <TICKER>
    ```
    Returns `{ ok, ticker, lastGeneratedAt, nodeCount }`. If `lastGeneratedAt` is **within 30 days**
    and the user did **not** ask to *regenerate*/*revise* → tell them "loaded the cached value chain
@@ -31,7 +31,7 @@ exploration, not a financial assertion.
    anything you can't stand behind; never tag `disclosed-10K` unless it truly was), drop junk, then
    **push**:
    ```
-   node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs value-chain <TICKER> --data <temp.json>
+   node scripts/assay.mjs value-chain <TICKER> --data <temp.json>
    ```
    where `<temp.json>` is `{ "entities": [...], "edges": [...] }`. Delete the temp file after. It
    returns `{ "ok": true, "delivered": true }`.
@@ -43,7 +43,7 @@ exploration, not a financial assertion.
 > You are gathering value-chain relationships for **`<TICKER>`**. Return structured candidates to the
 > caller — do NOT push anything yourself. Work efficiently: ~6–10 tool calls.
 >
-> **1. Cheap context first:** `node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs data <TICKER>`
+> **1. Cheap context first:** `node scripts/assay.mjs data <TICKER>`
 > gives `sector`, `industry`, `business` — use them to seed competitor candidates.
 >
 > **2. Gather, hybrid + confidence (cap ~8 per relation, keep the graph legible):**
