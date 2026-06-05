@@ -10,11 +10,11 @@ Run a full research pass on a US-listed stock or ETF and render it live in the *
 ## How to run this (orchestration — you, the main agent)
 
 0. **Ensure the Assay app is running — do this yourself, before spawning the sub-agent.** The dev server must be owned by *you* (the long-lived session), not the sub-agent: a sub-agent that launches it has the server die when it returns, so your later recommendation/risks pushes fail. Steps:
-   - Run `node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs health`. **Exit 0 = already running → skip the rest of step 0.**
+   - Run `node scripts/assay.mjs health`. **Exit 0 = already running → skip the rest of step 0.**
    - If not running (exit 1), start the dev server with the **Bash tool using `run_in_background: true`** so the harness keeps it alive across turns:
-     - command: `npm run dev` · cwd: `C:/Users/Avi/Desktop/Developer/Assay`
+     - command: `npm run dev` · cwd: `<repo root>`
      - ⚠ **Never** set `NODE_OPTIONS=--use-system-ca` for this — Electron aborts at launch (exit 9). Dev/build don't need it; only `npm install` does.
-   - Then block until it's healthy: run `node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs wait` (polls `/health` up to 90s, no second launch). Cold start can take 20–40s. If it exits non-zero, surface that to the user and stop — don't dispatch the sub-agent into a dead app.
+   - Then block until it's healthy: run `node scripts/assay.mjs wait` (polls `/health` up to 90s, no second launch). Cold start can take 20–40s. If it exits non-zero, surface that to the user and stop — don't dispatch the sub-agent into a dead app.
 1. Coverage is **US-listed stocks & ETFs only.** NYSE/Nasdaq-listed **ADRs of foreign companies count** (they have a US ticker plus Yahoo/SEC data — e.g. ASX = ASE Technology, TSM, BABA). Out of scope and stop: tickers **not listed on a US exchange**, crypto, and forex. If unsure whether a ticker is US-listed, proceed — the data fetch will fail cleanly if it isn't.
 2. Spawn **one** sub-agent via the **Agent** tool with **`subagent_type: "general-purpose"` and `model: "sonnet"`**, passing the **Sub-agent prompt** below with `<TICKER>` substituted. (Do **not** use `run_in_background` — you need its return value to write the recommendation.)
 3. **Wait passively.** Do NOT run `echo`/`sleep`/poll filler — the harness re-invokes you when the sub-agent returns. (Global no-polling rule is in memory.)
@@ -37,16 +37,16 @@ Distilled from market-research methodology. Apply as **behind-the-scenes reasoni
 >
 > Work efficiently — a clean run is **~5–6 tool calls**. Do NOT create probe/scratch files, do NOT re-run a call that already returned, and do NOT run `echo`/`sleep`/poll filler to "wait" — results arrive on their own.
 >
-> Helper CLI: `node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs <cmd>`
+> Helper CLI: `node scripts/assay.mjs <cmd>`
 >
 > **1. Open the window.** The caller has already started and health-checked the app, so do **not** launch it — just open the ticker window:
 > ```
-> node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs research <TICKER>
+> node scripts/assay.mjs research <TICKER>
 > ```
 > The app self-renders the price chart and key stats — do NOT duplicate that.
 >
 > **2. Fetch the data bundle — app-side first, MCP only to fill gaps.**
-> Run `node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs data <TICKER>` → `{ "ok": true, "ticker", "data": {…} }`. `data` carries:
+> Run `node scripts/assay.mjs data <TICKER>` → `{ "ok": true, "ticker", "data": {…} }`. `data` carries:
 > - **Valuation/price:** `price`, `marketCap`, `trailingPE`, `forwardPE`, `pegRatio`, `priceToSales`, `priceToBook`, `beta`, `fiftyTwoWeekLow/High`, `fiftyDayAverage`, `twoHundredDayAverage`, `trailingEps`, `forwardEps`.
 > - **Trajectory:** `totalRevenue` (TTM), `revenueGrowth`, `earningsGrowth`, `grossMargins`, `operatingMargins`, `profitMargins`, `returnOnEquity`, `freeCashflow`, `operatingCashflow`, `totalCash`, `totalDebt` — growth/margins are **fractions** (0.166 = +16.6%), TTM/MRQ.
 > - **`analyst`:** `rating`, `score` (1 = strong buy … 5 = sell), `count`, `targetLow/Mean/Median/High`. May be thin: `rating` can be `"none"` and `score` absent for lightly-covered names.
@@ -64,7 +64,7 @@ Distilled from market-research methodology. Apply as **behind-the-scenes reasoni
 >
 > **3. Build and push the SEC-summary panel only.** Write the JSON to a temp file, send with `--data`, delete the temp file:
 > ```
-> node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> sec-summary --title "SEC Filing Summary" --data <temp.json>
+> node scripts/assay.mjs panel <TICKER> sec-summary --title "SEC Filing Summary" --data <temp.json>
 > ```
 > Do NOT send markdown for this type. Keep it tight: real numbers, short strings. Use `tone: "good" | "bad" | "neutral"` on metrics (a loss → `bad`). It returns `{"ok":true,"delivered":true}`.
 >
@@ -91,7 +91,7 @@ Distilled from market-research methodology. Apply as **behind-the-scenes reasoni
 > - Upcoming catalysts: run **one** WebSearch (e.g. `"<TICKER> earnings date 2026"`, plus any known product/regulatory events) — keep it to a short list, don't over-fetch.
 > - Build the `news` JSON, write it to a temp file, push, delete the temp file:
 > ```
-> node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> news --title "News & catalysts" --data <temp.json>
+> node scripts/assay.mjs panel <TICKER> news --title "News & catalysts" --data <temp.json>
 > ```
 > Do NOT send markdown for this type. Keep `why` to one tight line; set `sentiment` per item; use ISO dates (`YYYY-MM-DD`).
 > **Discipline:** include a headline only if it's material; set `sentiment` honestly (not optimistically); ground each `why` in the item itself; flag any stale or unconfirmed item in `note` rather than presenting it as settled.
@@ -135,7 +135,7 @@ After the sub-agent returns, write the recommendation **yourself** from its `dat
   - **Thin / absent coverage:** if `rating` is `"none"` or `score` is missing, **omit `score`** and set `rating` to a plain-language label like `"Thin coverage (3 analysts, no consensus rating)"`. Note when the price already sits above the mean target.
 - Write the JSON to a temp file and push (then delete the temp file):
   ```
-  node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> recommendation --title "Recommendation" --data <temp.json>
+  node scripts/assay.mjs panel <TICKER> recommendation --title "Recommendation" --data <temp.json>
   ```
   Do NOT send markdown for this type. It returns `{"ok":true,"delivered":true}`.
 
@@ -167,7 +167,7 @@ After the sub-agent returns, write the `risks` panel **yourself** from its risk-
 - **`note`:** always frame screens as **structural signals, not a return/performance forecast.**
 - Write the JSON to a temp file and push (then delete the temp file):
   ```
-  node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> risks --title "Risks & red flags" --data <temp.json>
+  node scripts/assay.mjs panel <TICKER> risks --title "Risks & red flags" --data <temp.json>
   ```
   Do NOT send markdown for this type. It returns `{"ok":true,"delivered":true}`.
 

@@ -403,7 +403,7 @@ In the **Sub-agent prompt** section, after step **3** ("Build and push the SEC-s
 > - Upcoming catalysts: run **one** WebSearch (e.g. `"<TICKER> earnings date 2026"`, plus any known product/regulatory events) — keep it to a short list, don't over-fetch.
 > - Build the `news` JSON, write it to a temp file, push, delete the temp file:
 > ```
-> node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> news --title "News & catalysts" --data <temp.json>
+> node scripts/assay.mjs panel <TICKER> news --title "News & catalysts" --data <temp.json>
 > ```
 > Do NOT send markdown for this type. Keep `why` to one tight line; set `sentiment` per item; use ISO dates (`YYYY-MM-DD`).
 >
@@ -471,7 +471,7 @@ After the sub-agent returns, write the `risks` panel **yourself** from its risk-
 - **`note`:** always frame screens as **structural signals, not a return/performance forecast.**
 - Write the JSON to a temp file and push (then delete the temp file):
   ```
-  node C:/Users/Avi/Desktop/Developer/Assay/scripts/assay.mjs panel <TICKER> risks --title "Risks & red flags" --data <temp.json>
+  node scripts/assay.mjs panel <TICKER> risks --title "Risks & red flags" --data <temp.json>
   ```
   Do NOT send markdown for this type. It returns `{"ok":true,"delivered":true}`.
 
