@@ -83,3 +83,28 @@ export function computeColumnLayout(
   }
   return pos
 }
+
+/**
+ * Count, for each supplier/customer node, how many distinct peers (the seed plus
+ * its direct competitors) connect to it via a supplier/customer edge. A count ≥2
+ * means the node is genuinely shared across the competitive set — the signal the
+ * "N peers" badge surfaces. Competitor edges are ignored; peer nodes themselves
+ * are never counted as shared targets.
+ */
+export function computePeerCounts(peerIds: Set<number>, edges: VcEdge[]): Map<number, number> {
+  const peersByNode = new Map<number, Set<number>>()
+  const add = (node: number, peer: number): void => {
+    if (!peersByNode.has(node)) peersByNode.set(node, new Set())
+    peersByNode.get(node)!.add(peer)
+  }
+  for (const e of edges) {
+    if (e.relation === 'competitor') continue
+    const sPeer = peerIds.has(e.source)
+    const tPeer = peerIds.has(e.target)
+    if (sPeer && !tPeer) add(e.target, e.source)
+    else if (tPeer && !sPeer) add(e.source, e.target)
+  }
+  const counts = new Map<number, number>()
+  for (const [node, peers] of peersByNode) counts.set(node, peers.size)
+  return counts
+}
