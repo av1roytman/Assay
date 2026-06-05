@@ -197,5 +197,5 @@ After the sub-agent returns, write the `risks` panel **yourself** from its risk-
 `severity` is `"high" | "medium" | "low"`; screen `tone` is `"good" | "bad" | "neutral"`. `screens`, `note`, `asOf` are optional.
 
 ## Notes
-- Panels live now: `sec-summary`, `recommendation`, `news`, `risks` (plus the app-owned chart, key stats, and scorecards). Still coming: value chain and peers.
+- Panels live now: `sec-summary`, `recommendation`, `news`, `risks` (plus the app-owned chart, key stats, and scorecards). The value chain is its own `/value-chain` skill + window. Still coming: peers.
 - If the app fails to launch or a push fails, surface it plainly to the user.

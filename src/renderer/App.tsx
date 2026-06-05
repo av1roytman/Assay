@@ -18,18 +18,25 @@ import type {
   AnalystCall,
   Fundamentals,
   Scorecards,
-  ValuationData
+  ValuationData,
+  SurfaceInit
 } from '../shared/types'
 import { ChartPanel } from './components/ChartPanel'
 import { ScorecardGrid } from './components/ScorecardPanel'
 import { ValuationPanel } from './components/ValuationPanel'
+import { ValueChainView } from './components/ValueChainView'
 
 export default function App(): JSX.Element {
-  const [ticker, setTicker] = useState<string | null>(null)
+  const [init, setInit] = useState<SurfaceInit | null>(null)
 
-  useEffect(() => window.api.onInit((init) => setTicker(init.ticker)), [])
+  useEffect(() => window.api.onInit(setInit), [])
 
-  return ticker ? <Dashboard ticker={ticker} /> : <Home />
+  if (!init) return <Home />
+  return init.kind === 'value-chain' ? (
+    <ValueChainView seed={init.ticker} />
+  ) : (
+    <Dashboard ticker={init.ticker} />
+  )
 }
 
 function Home(): JSX.Element {

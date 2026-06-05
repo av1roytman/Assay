@@ -5,6 +5,8 @@ import { listHistory } from '../database/history'
 import { getStoredPanels } from '../database/panels'
 import { getScorecards } from '../services/scorecardService'
 import { getValuation } from '../services/valuationService'
+import { getGraph } from '../database/valueChain'
+import { getDb } from '../database/connection'
 
 // Renderer-facing channels. Keep mirrored in src/shared/types.ts (AssayApi)
 // and src/preload/index.ts. Push channels (research:init, panel:update) are
@@ -20,4 +22,5 @@ export function registerIpc(): void {
   ipcMain.handle('stocks:valuation', (_e, symbol: string) => getValuation(symbol))
   ipcMain.handle('history:list', () => listHistory())
   ipcMain.handle('panels:get', (_e, symbol: string) => getStoredPanels(symbol))
+  ipcMain.handle('valuechain:get', (_e, seed: string) => getGraph(getDb(), seed))
 }

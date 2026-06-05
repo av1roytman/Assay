@@ -139,6 +139,22 @@ if (cmd === 'health') {
     const markdown = file ? readFileSync(file, 'utf8') : readFileSync(0, 'utf8')
     console.log(await post('/panel', { ticker, type, title: flag('--title'), markdown }))
   }
+} else if (cmd === 'vc') {
+  const ticker = rest[0]
+  if (!ticker) {
+    console.error('usage: vc <TICKER>   (open/focus the value-chain window + report freshness)')
+    process.exit(1)
+  }
+  console.log(await post('/value-chain-open', { ticker }))
+} else if (cmd === 'value-chain') {
+  const ticker = rest[0]
+  const dataFile = flag('--data')
+  if (!ticker || !dataFile) {
+    console.error('usage: value-chain <TICKER> --data <file.json>   (file: { entities[], edges[] })')
+    process.exit(1)
+  }
+  const { entities, edges } = JSON.parse(readFileSync(dataFile, 'utf8'))
+  console.log(await post('/value-chain', { seed: ticker, entities, edges, generatedAt: Date.now() }))
 } else {
   console.error('commands: health | ensure | wait | research <T> | panel <T> <type> [--title][--file]')
   process.exit(1)

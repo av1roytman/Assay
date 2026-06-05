@@ -9,7 +9,7 @@ import { writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
-import type { PushPanel } from '../../shared/types'
+import type { PushPanel, VcPushPayload } from '../../shared/types'
 
 const PORT = 8765
 const HOST = '127.0.0.1'
@@ -21,6 +21,10 @@ export interface ControlCallbacks {
   // Fetch the slim research bundle (Yahoo + SEC) for a ticker. Returns whatever
   // the data services produce; the server just serializes it back to the client.
   onData: (ticker: string) => Promise<unknown>
+  // Open/focus the VC window for a ticker and report its current freshness.
+  onValueChainOpen: (ticker: string) => { lastGeneratedAt: number | null; nodeCount: number }
+  // Merge a pushed graph into the store and forward it to the window.
+  onValueChainPush: (payload: VcPushPayload) => boolean
 }
 
 let server: Server | null = null
@@ -132,6 +136,43 @@ async function handle(req: IncomingMessage, res: ServerResponse, cb: ControlCall
       send(res, 200, { ok: true, ticker, data })
     } catch (e) {
       send(res, 500, { ok: false, error: e instanceof Error ? e.message : 'fetch failed' })
+    }
+    return
+  }
+
+  if (url === '/value-chain-open') {
+    const ticker = String(payload.ticker ?? '').trim().toUpperCase()
+    if (!ticker) {
+      send(res, 400, { ok: false, error: 'ticker required' })
+      return
+    }
+    try {
+      const { lastGeneratedAt, nodeCount } = cb.onValueChainOpen(ticker)
+      send(res, 200, { ok: true, ticker, lastGeneratedAt, nodeCount })
+    } catch (e) {
+      send(res, 500, { ok: false, error: e instanceof Error ? e.message : 'open failed' })
+    }
+    return
+  }
+
+  if (url === '/value-chain') {
+    const seed = String(payload.seed ?? '').trim().toUpperCase()
+    const entities = payload.entities
+    const edges = payload.edges
+    if (!seed || !Array.isArray(entities) || !Array.isArray(edges)) {
+      send(res, 400, { ok: false, error: 'seed, entities[], edges[] required' })
+      return
+    }
+    try {
+      const delivered = cb.onValueChainPush({
+        seed,
+        entities,
+        edges,
+        generatedAt: typeof payload.generatedAt === 'number' ? payload.generatedAt : Date.now()
+      } as VcPushPayload)
+      send(res, 200, { ok: true, delivered })
+    } catch (e) {
+      send(res, 500, { ok: false, error: e instanceof Error ? e.message : 'push failed' })
     }
     return
   }

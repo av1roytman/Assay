@@ -222,8 +222,64 @@ export interface RisksData {
   asOf?: string
 }
 
-export interface ResearchInit {
+// Tells a freshly-loaded window which surface it is and which ticker it owns.
+export interface SurfaceInit {
+  kind: 'research' | 'value-chain'
   ticker: string
+}
+
+// ── Value-chain map (Claude-pushed graph, app-stored & rendered) ─────────────
+
+export type VcKind = 'public' | 'private' | 'segment'
+export type VcRelation = 'supplier' | 'customer' | 'competitor'
+export type VcConfidence = 'high' | 'medium' | 'low'
+export type VcSource = 'disclosed-10K' | 'well-known' | 'web' | 'inferred'
+
+// What Claude pushes (no ids — the app assigns/dedups them).
+export interface VcEntityIn {
+  name: string
+  ticker?: string // US-listed public cos; enables dedup + clickability
+  kind: VcKind
+  description?: string // one-line "what they do"
+  aliases?: string[]
+}
+export interface VcEdgeIn {
+  source: string // ticker if public, else name — must match an entity in the same push
+  target: string
+  relation: VcRelation
+  confidence: VcConfidence
+  source_tag: VcSource
+  rationale?: string // one-line "how they're related"
+}
+export interface VcPushPayload {
+  seed: string // ticker of the focus company
+  entities: VcEntityIn[]
+  edges: VcEdgeIn[]
+  generatedAt: number // epoch ms
+}
+
+// What the renderer reads back (ids assigned, expandable computed).
+export interface VcNode {
+  id: number
+  name: string
+  ticker?: string
+  kind: VcKind
+  description?: string
+  expandable: boolean // has its own stored generation
+}
+export interface VcEdge {
+  source: number
+  target: number
+  relation: VcRelation
+  confidence: VcConfidence
+  source_tag: VcSource
+  rationale?: string
+}
+export interface VcGraph {
+  seed: string
+  nodes: VcNode[]
+  edges: VcEdge[]
+  lastGeneratedAt: number | null
 }
 
 export interface HistoryEntry {
@@ -329,8 +385,12 @@ export interface AssayApi {
   getHistory(): Promise<HistoryEntry[]>
   // Persisted panels (the last dossier) for a ticker — newest content per type.
   getPanels(symbol: string): Promise<PushPanel[]>
-  // Subscribe to "this window is for ticker X". Returns an unsubscribe fn.
-  onInit(cb: (init: ResearchInit) => void): () => void
+  // Subscribe to "this window is surface S for ticker X". Returns an unsubscribe fn.
+  onInit(cb: (init: SurfaceInit) => void): () => void
+  // Read the stored value-chain graph reachable from a seed ticker.
+  getValueChain(seed: string): Promise<VcGraph | null>
+  // Subscribe to value-chain graph pushes. Returns an unsubscribe fn.
+  onValueChain(cb: (graph: VcGraph) => void): () => void
   // Subscribe to panels pushed by Claude. Returns an unsubscribe fn.
   onPanel(cb: (panel: PushPanel) => void): () => void
 }
