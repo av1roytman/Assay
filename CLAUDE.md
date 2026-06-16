@@ -106,7 +106,7 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 - [x] `/research <TICKER>` skill (in-repo at [.claude/skills/research/SKILL.md](.claude/skills/research/SKILL.md)) + control client ([scripts/assay.mjs](scripts/assay.mjs)): ensure → research → stream panels
 - [x] First Claude panels wired end-to-end: **SEC summary** + **recommendation**
 - [x] Lightweight history (tickers + dates) in SQLite ([history.ts](src/main/database/history.ts), migration v2)
-- [ ] **Live click-through test** — run `npm run dev` + `/research AAPL`, confirm chart paints and Claude panels stream in
+- [x] **Live click-through test** — `npm run dev` + `/research AAPL` confirmed 2026-06-10: chart painted (11,465 bars), sec-summary/news/recommendation/risks all streamed in `delivered:true`
 - [ ] Earnings / notable-dates numeric panel (needs Yahoo service) — deferred to v2
 
 ### v2 — fill out the panels
@@ -115,17 +115,23 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 - [x] News & catalysts panel — Claude-pushed (`NewsData`); Sonnet sub-agent gathers (yfinance news + WebSearch) & pushes. See [spec](docs/superpowers/specs/2026-06-03-news-risks-panels-design.md)
 - [x] Risks / red flags panel — Claude-pushed (`RisksData`); main Opus agent writes (categorized + optional structural screens). Same spec
 - [x] DCF valuation panel — app-owned, app-computed 2-stage equity DCF + reverse-DCF check (pure `dcf.ts` engine, vitest-tested → `valuationService.ts` → `stocks:valuation` IPC → `ValuationPanel`); also feeds `valuation` into the `/research` data bundle so the recommendation references it. See [spec](docs/superpowers/specs/2026-06-03-dcf-valuation-panel-design.md)
-- [ ] Peer comparison (Claude picks peers → app fetches their metrics)
+- [x] Peer comparison (2026-06-10) — `/research` skill pushes just `{tickers}`; main enriches via the cached Yahoo bundle ([peers.ts](src/main/services/peers.ts)) into a `PeersData` table (seed first), persisted like any panel; `PeersCard` renders it full-width
 
 ### v3 — the value chain + polish
 - [x] Value-chain **node graph** — standalone `/value-chain` skill + dedicated radial-graph window (React Flow + d3-force); Claude pushes entities/edges (hybrid sources + confidence), app dedups/persists (migration v4: `vc_entities`/`vc_edges`/`vc_generations`) & renders an accreting cross-company map; 30-day freshness cache. See [spec](docs/superpowers/specs/2026-06-03-value-chain-map-design.md)
-- [ ] Reopen-from-history, window tabs option, settings, electron-builder packaging
+- [x] Reopen-from-history — clickable Home rows → `research:open` IPC → saved dossier reloads (reopen doesn't bump the research count) (2026-06-10)
+- [ ] Window tabs option, settings, electron-builder packaging
 - [x] Persist pushed panels to `assay.db` (migration v3, `panels` table; one row per ticker+type, upserted with `created_at`). Windows reload the last dossier with its date on open ([panels.ts](src/main/database/panels.ts), `getPanels` IPC); fresh pushes overwrite by `savedAt`. ("save full dossiers")
 
 ### Backlog — UX & indicators (noted 2026-06-05)
-- [ ] **RSI indicator on the price chart** — add RSI (14) as a sub-pane on `ChartPanel` (lightweight-charts), alongside the existing MA/volume overlays. (RSI is already a Technical-scorecard metric; this surfaces it visually.)
-- [ ] **Acronym tooltips** — hover/tap tips explaining each metric acronym (P/E, EV/EBITDA, FCF yield, ROE/ROIC, PEG, P/B, P/S, RSI, DCF, margin-of-safety, …) across the Key Stats / scorecard / valuation panels, so the dashboard is legible without outside lookups.
-- [ ] **Earnings date & key upcoming events panel (exact dates)** — app-owned panel listing the next **earnings date** plus other dated catalysts (ex-dividend, splits, investor days) with **exact dates**, from the Yahoo calendar (`yahooService`). Supersedes the v1-deferred "earnings / notable-dates" line above.
+- [x] **RSI indicator on the price chart** (2026-06-10) — Wilder RSI(14) band between candles and volume on `ChartPanel`, with 30/70 guides; daily-derived ranges only (cleared intraday)
+- [x] **Acronym tooltips** (2026-06-10) — [glossary.ts](src/renderer/glossary.ts) `explain()` → native `title` tips on metric cells in Key Stats / scorecards / valuation / peers
+- [x] **Earnings date & key upcoming events panel (exact dates)** (2026-06-10) — `calendarEvents` rides the cached research-bundle fetch (`YahooResearch.calendar`); `Upcoming dates` panel shows earnings (window), ex-dividend, dividend-paid with exact dates
+
+### Backlog — close the loop (noted 2026-06-10)
+- [x] **Track record / "audit the analyst" panel** ⭐ (2026-06-10) — append-only `calls` table (migration v5) fed by every recommendation push (call + headline + price-at-call from `street.targets.current`); Home "Track record" list shows `CALL SYM @ $px · date · +X% since` (current price via Stooq, [trackRecord.ts](src/main/services/trackRecord.ts)), rows click through to the dossier.
+- [ ] **"What changed since last research" diff** — builds on version history above. On a fresh `/research`, surface flips (buy→hold), new/removed risk categories, consensus shifts since the previous dossier.
+- [ ] **Dossier export** (markdown/HTML serializer over the stored structured panels) — nice-to-have, after the two above.
 
 ### Out of scope (intentional)
 - [ ] Idea screening / discovery — bring-your-own-ticker
@@ -152,6 +158,7 @@ npm run rebuild # electron-rebuild, run after bumping Electron major
 - **Python MCP servers need uv.** Installed uv 0.11.17 to `<user-home>\.local\bin` (on PATH). MCP servers run via `uvx`. `--system-certs`/`UV_SYSTEM_CERTS=true` (set in `.mcp.json`) fix uv's *own* package downloads (rustls), but **NOT** the servers' child Python HTTP stacks — those still trust only `certifi` and fail every data fetch (sec-edgar uses `requests`, yfinance uses `curl_cffi`).
   - **Fix (done):** exported the Windows root store (incl. the AVG root) to `certs/windows-ca-bundle.pem` (gitignored) and pointed the Python stacks at it via `SSL_CERT_FILE` + `REQUESTS_CA_BUNDLE` + `CURL_CA_BUNDLE` in each server's `env` in `.mcp.json`. Verified both return HTTP 200.
   - **Gotchas:** MCP servers cache env at startup — **restart Claude Code** after editing `.mcp.json`. If AVG rotates its scanning root, cert errors return → re-export the bundle (PowerShell loop over `Cert:\LocalMachine\Root` + `Cert:\CurrentUser\Root` + `Cert:\LocalMachine\CA`, base64 each cert into BEGIN/END CERTIFICATE blocks).
+- **`better-sqlite3` dual ABI (app vs tests).** The main copy is electron-rebuilt to **Electron's** ABI (postinstall), which vitest under system Node can't load (`NODE_MODULE_VERSION` mismatch). Tests therefore import the **`better-sqlite3-node`** npm alias (devDependency, keeps its Node prebuild — electron-rebuild's default scope is prod deps only); types shimmed in [better-sqlite3-node.d.ts](src/main/database/better-sqlite3-node.d.ts). Don't "fix" a DB test by pointing it back at `better-sqlite3`.
 - **`better-sqlite3` rebuild EPERM.** The native rebuild can fail once with `EPERM: unlink ...better_sqlite3.node` (Defender scanning the freshly-extracted prebuild). Fix: `Remove-Item node_modules\better-sqlite3\build -Recurse -Force` then `npm run rebuild`. It's transient — a retry succeeds.
 
 ## Conventions

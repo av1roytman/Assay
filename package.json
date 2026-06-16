@@ -19,6 +19,7 @@
   "devDependencies": {
     "@electron/rebuild": "^3.7.2",
     "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3-node": "npm:better-sqlite3@^12.9.0",
     "@types/d3-force": "^3.0.10",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",

@@ -288,6 +288,45 @@ export interface HistoryEntry {
   count: number
 }
 
+// One recommendation call as made, enriched with the current price for the
+// Home track-record list ("audit the analyst").
+export interface TrackRecordEntry {
+  symbol: string
+  call: AnalystCall
+  headline?: string
+  priceAtCall?: number
+  priceNow?: number
+  returnPct?: number // percent since the call
+  at: number // epoch ms the call was pushed
+}
+
+// Upcoming dated events from Yahoo's calendarEvents module (ISO dates).
+export interface CalendarData {
+  earningsDates?: string[] // one confirmed date, or two = estimate window
+  exDividendDate?: string
+  dividendDate?: string
+}
+
+// ── Peer comparison (Claude picks tickers → app fills metrics) ───────────────
+// The push carries just { tickers }; main enriches it into PeersData (seed
+// company first) before persisting/forwarding.
+export interface PeerRow {
+  symbol: string
+  marketCap?: number
+  forwardPE?: number
+  priceToSales?: number
+  revenueGrowth?: number // fraction
+  operatingMargins?: number // fraction
+  fcfYield?: number // fraction: FCF / market cap
+  dividendYield?: number // percent
+  beta?: number
+}
+export interface PeersData {
+  rows: PeerRow[] // seed company first
+  note?: string
+  asOf?: string
+}
+
 // Valuation fundamentals the app fetches from Yahoo (fields Stooq doesn't carry).
 // All optional — the Key Stats panel degrades gracefully if Yahoo is unavailable.
 export interface Fundamentals {
@@ -352,6 +391,7 @@ export interface YahooResearch {
   returnOnAssets?: number
   quoteType?: string // Yahoo price.quoteType: "EQUITY" | "ETF" | …
   etf?: EtfData // present only for ETFs
+  calendar?: CalendarData // upcoming earnings/dividend dates
   analyst?: AnalystConsensus
 }
 
@@ -383,6 +423,13 @@ export interface AssayApi {
   getScorecards(symbol: string): Promise<Scorecards | null>
   getValuation(symbol: string): Promise<ValuationData | null>
   getHistory(): Promise<HistoryEntry[]>
+  // Open (or focus) the research window for a ticker — used by the Home history
+  // list. Does not count as a new research run.
+  openResearch(symbol: string): Promise<void>
+  // Track record of recommendation calls, enriched with current prices.
+  getTrackRecord(): Promise<TrackRecordEntry[]>
+  // Upcoming dated events (earnings, ex-div) from the cached research bundle.
+  getCalendar(symbol: string): Promise<CalendarData | null>
   // Persisted panels (the last dossier) for a ticker — newest content per type.
   getPanels(symbol: string): Promise<PushPanel[]>
   // Subscribe to "this window is surface S for ticker X". Returns an unsubscribe fn.

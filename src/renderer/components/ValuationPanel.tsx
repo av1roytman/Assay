@@ -1,4 +1,5 @@
 import type { ValuationData } from '../../shared/types'
+import { explain } from '../glossary'
 
 const VERDICT_STYLES: Record<string, { label: string; cls: string }> = {
   undervalued: { label: 'UNDERVALUED', cls: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30' },
@@ -28,7 +29,9 @@ export function ValuationPanel({ data }: { data: ValuationData }): JSX.Element {
         <span className={`rounded-md px-2.5 py-1 text-sm font-bold tracking-wide ring-1 ${style.cls}`}>
           {style.label}
         </span>
-        <span className="text-sm text-zinc-300">{signedPct(mos)} margin of safety vs price</span>
+        <span className="text-sm text-zinc-300" title={explain('margin of safety')}>
+          {signedPct(mos)} margin of safety vs price
+        </span>
       </div>
 
       <div className="mt-4 flex items-baseline gap-4">
@@ -65,7 +68,9 @@ export function ValuationPanel({ data }: { data: ValuationData }): JSX.Element {
           <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px] sm:grid-cols-3">
             {data.assumptions.map((a) => (
               <div key={a.label} className="flex justify-between gap-2">
-                <dt className="text-zinc-500">{a.label}</dt>
+                <dt className="text-zinc-500" title={explain(a.label)}>
+                  {a.label}
+                </dt>
                 <dd className="tabular-nums text-zinc-300">{a.value}</dd>
               </div>
             ))}

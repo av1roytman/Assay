@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import Database from 'better-sqlite3'
+// Node-ABI alias of better-sqlite3 (see package.json devDependencies): the main
+// copy is electron-rebuilt to Electron's ABI, which vitest under system Node
+// can't load. Types are shimmed in better-sqlite3-node.d.ts.
+import Database from 'better-sqlite3-node'
 import { migrations } from './migrations'
 import { upsertGraph, getGraph, normalizeName } from './valueChain'
 import type { VcPushPayload } from '../../shared/types'
