@@ -131,15 +131,14 @@ After the sub-agent returns, write the recommendation **yourself** from its `dat
 - **Apply the Research discipline** (above): weigh contrarian evidence (the thesis must acknowledge the opposing case, with `buyIf` / `avoidIf` as the vehicle), separate fact from inference, and flag stale consensus/targets in `asOf` when a newer event is known.
 - **Call + thesis:** your own buy/hold/avoid with reasoning, `buyIf`, `avoidIf`. Apply a **consistent valuation discipline across tickers** (e.g. forward P/E vs growth — the cross-ticker consistency is the main reason this lives on Opus, not the sub-agent). For non-USD filers, lean on currency-clean signals (forward P/E, margins, growth, price-vs-MA) and **ignore cross-currency ratios** like P/S.
 - **Reference the DCF when present:** the `data` bundle now carries `valuation` (an app-computed 2-stage DCF). When `valuation.applicable` is true, weave its read into your thesis — e.g. "trades ~20% below a ~$X DCF fair value (margin of safety +20%)" or "priced for demanding ~18%/yr FCF growth (reverse DCF)". Treat it as **one input among many, not a mechanical buy/sell trigger**, and respect its caveats (FCFE approximation, single TTM FCF base; unreliable for financials). When `valuation.applicable` is false, ignore it. The Valuation panel renders itself — you do **not** push it.
-- **`street`** maps from `data.analyst`: `rating`, `score`, `analysts: count`, `targets: { current: data.price, low: targetLow, mean: targetMean, median: targetMedian, high: targetHigh }`.
-  - **Thin / absent coverage:** if `rating` is `"none"` or `score` is missing, **omit `score`** and set `rating` to a plain-language label like `"Thin coverage (3 analysts, no consensus rating)"`. Note when the price already sits above the mean target.
+- **`street` is app-filled — you don't source it.** After you push, the app overwrites `street.rating` / `score` / `analysts` / `targets` with the real Yahoo consensus from `data.analyst` (mirrors peers) and sets `targets.current` from the live quote — including thin/absent-coverage cases (`rating: "none"` falls back cleanly). You only send `call` / `headline` / `thesis` / `buyIf` / `avoidIf` and, if you have per-firm color, `street.notable`. Don't spend tool calls sourcing consensus numbers; still flag stale consensus in `asOf` when a newer event is known.
 - Write the JSON to a temp file and push (then delete the temp file):
   ```
   node scripts/assay.mjs panel <TICKER> recommendation --title "Recommendation" --data <temp.json>
   ```
   Do NOT send markdown for this type. It returns `{"ok":true,"delivered":true}`.
 
-**`recommendation` JSON shape:**
+**`recommendation` JSON shape** (the app fills `street.rating` / `score` / `analysts` / `targets`; only `street.notable` is yours):
 ```json
 {
   "call": "buy | hold | avoid",
@@ -148,10 +147,6 @@ After the sub-agent returns, write the recommendation **yourself** from its `dat
   "buyIf": "what would flip you to buy (optional)",
   "avoidIf": "what would flip you to avoid (optional)",
   "street": {
-    "rating": "Buy",
-    "score": 1.98,
-    "analysts": 43,
-    "targets": { "current": 312, "low": 215, "mean": 310.5, "median": 310, "high": 400 },
     "notable": [ { "firm": "Wedbush", "target": 400, "note": "AI inflection" } ]
   },
   "asOf": "data source + date (optional)"

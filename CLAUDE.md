@@ -111,7 +111,7 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 
 ### v2 — fill out the panels
 - [x] Rule-scorecards panel — app-computed, **Yahoo-primary** (Value/Growth/Dividend/Technical + ETF Profile/Technical); pure `scoring.ts` engine (vitest-tested) → `scorecardService.ts` → `stocks:scorecards` IPC → `ScorecardPanel`. SEC-EDGAR source + sector-aware thresholds deferred (see [spec](docs/superpowers/specs/2026-06-03-scorecards-panel-design.md))
-- [ ] Analyst-consensus data (Yahoo) shown beside Claude's thesis
+- [x] Analyst-consensus data (Yahoo) shown beside Claude's thesis — app enriches the recommendation push's `street` with the real Yahoo `AnalystConsensus` (keeps Claude's `notable`); pure `consensus.ts` `mergeStreet` (vitest-tested) wired into `onPanel`, mirroring peers. Also makes track-record price-at-call app-sourced. See [spec](docs/superpowers/specs/2026-06-28-analyst-consensus-enrichment-design.md)
 - [x] News & catalysts panel — Claude-pushed (`NewsData`); Sonnet sub-agent gathers (yfinance news + WebSearch) & pushes. See [spec](docs/superpowers/specs/2026-06-03-news-risks-panels-design.md)
 - [x] Risks / red flags panel — Claude-pushed (`RisksData`); main Opus agent writes (categorized + optional structural screens). Same spec
 - [x] DCF valuation panel — app-owned, app-computed 2-stage equity DCF + reverse-DCF check (pure `dcf.ts` engine, vitest-tested → `valuationService.ts` → `stocks:valuation` IPC → `ValuationPanel`); also feeds `valuation` into the `/research` data bundle so the recommendation references it. See [spec](docs/superpowers/specs/2026-06-03-dcf-valuation-panel-design.md)
