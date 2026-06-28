@@ -10,12 +10,18 @@
 // omits the valuation block) rather than leaving the renderer stuck on "Loading…".
 
 import { net } from 'electron'
-import type { DailyBar, IntradayBar, Fundamentals, YahooResearch, EtfData } from '../../shared/types'
+import type {
+  DailyBar,
+  IntradayBar,
+  Fundamentals,
+  YahooResearch,
+  EtfData,
+  CalendarData
+} from '../../shared/types'
 
 const CRUMB_URL = 'https://query1.finance.yahoo.com/v1/test/getcrumb'
 const COOKIE_URL = 'https://fc.yahoo.com'
 const SUMMARY_URL = 'https://query1.finance.yahoo.com/v10/finance/quoteSummary'
-const MODULES = 'price,summaryDetail,defaultKeyStatistics'
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
 const TIMEOUT_MS = 8000
@@ -70,22 +76,40 @@ interface QuoteSummaryResponse {
   }
 }
 
-function parse(json: unknown): Fundamentals | null {
-  const result = (json as QuoteSummaryResponse).quoteSummary?.result?.[0]
-  if (!result) return null
-  const sd = result.summaryDetail ?? {}
-  const ks = result.defaultKeyStatistics ?? {}
-  const pr = result.price ?? {}
-  const divYield = rawNum(sd.dividendYield)
-  return {
-    marketCap: rawNum(pr.marketCap) ?? rawNum(sd.marketCap),
-    trailingPE: rawNum(sd.trailingPE),
-    forwardPE: rawNum(sd.forwardPE) ?? rawNum(ks.forwardPE),
-    eps: rawNum(ks.trailingEps),
-    dividendYield: divYield != null ? divYield * 100 : undefined,
-    beta: rawNum(sd.beta)
-  }
+// ── Fetch cache ───────────────────────────────────────────────────────────────
+// One dashboard open fans out to fundamentals + scorecards + valuation (and a
+// /research run adds the data bundle), which previously meant 3–4 identical
+// quoteSummary fetches plus two full-history downloads per ticker. Cache the
+// in-flight promise per symbol with a short TTL: concurrent callers share one
+// fetch; failed/empty results are dropped so the next call retries.
+const CACHE_TTL_MS = 5 * 60_000
+
+interface CacheEntry<T> {
+  at: number
+  promise: Promise<T>
 }
+
+function cached<T>(
+  map: Map<string, CacheEntry<T>>,
+  key: string,
+  isEmpty: (v: T) => boolean,
+  fetcher: () => Promise<T>
+): Promise<T> {
+  const hit = map.get(key)
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.promise
+  const entry: CacheEntry<T> = { at: Date.now(), promise: fetcher() }
+  map.set(key, entry)
+  entry.promise.then(
+    (v) => {
+      if (isEmpty(v)) map.delete(key)
+    },
+    () => map.delete(key)
+  )
+  return entry.promise
+}
+
+const researchCache = new Map<string, CacheEntry<YahooResearch | null>>()
+const historyCache = new Map<string, CacheEntry<DailyBar[]>>()
 
 // ── Richer research bundle (for the /research skill's qualitative panels) ─────
 // Same crumb flow, more modules, but we extract only the ~30 fields Claude needs
@@ -93,7 +117,31 @@ function parse(json: unknown): Fundamentals | null {
 // blob's size (no officers, governance scores, address, etc.).
 
 const RESEARCH_MODULES =
-  'assetProfile,price,summaryDetail,defaultKeyStatistics,financialData,topHoldings,fundProfile'
+  'assetProfile,price,summaryDetail,defaultKeyStatistics,financialData,topHoldings,fundProfile,calendarEvents'
+
+// Epoch-seconds {raw, fmt} node → ISO date string.
+function isoDate(node: unknown): string | undefined {
+  const n = rawNum(node)
+  return n != null ? new Date(n * 1000).toISOString().slice(0, 10) : undefined
+}
+
+// Upcoming earnings/dividend dates from the calendarEvents module.
+function parseCalendar(r: Record<string, Record<string, unknown>>): CalendarData | undefined {
+  const ce = r.calendarEvents
+  if (!ce) return undefined
+  const earnings = (ce.earnings as Record<string, unknown> | undefined) ?? {}
+  const dates = Array.isArray(earnings.earningsDate)
+    ? (earnings.earningsDate as unknown[]).map(isoDate).filter((d): d is string => d != null)
+    : []
+  const exDiv = isoDate(ce.exDividendDate)
+  const div = isoDate(ce.dividendDate)
+  if (dates.length === 0 && !exDiv && !div) return undefined
+  return {
+    earningsDates: dates.length ? dates : undefined,
+    exDividendDate: exDiv,
+    dividendDate: div
+  }
+}
 
 function strVal(node: unknown): string | undefined {
   return typeof node === 'string' && node.trim() ? node.trim() : undefined
@@ -187,6 +235,7 @@ function parseResearch(json: unknown): YahooResearch | null {
     returnOnAssets: rawNum(fd.returnOnAssets),
     quoteType: strVal((pr as Record<string, unknown>).quoteType),
     etf: parseEtf(r),
+    calendar: parseCalendar(r),
     analyst: {
       rating: strVal(fd.recommendationKey),
       score: rawNum(fd.recommendationMean),
@@ -199,8 +248,13 @@ function parseResearch(json: unknown): YahooResearch | null {
   }
 }
 
-export async function getResearchData(symbol: string): Promise<YahooResearch | null> {
-  const sym = encodeURIComponent(symbol.trim().toUpperCase())
+export function getResearchData(symbol: string): Promise<YahooResearch | null> {
+  const sym = symbol.trim().toUpperCase()
+  return cached(researchCache, sym, (v) => v == null, () => fetchResearchData(sym))
+}
+
+async function fetchResearchData(symbol: string): Promise<YahooResearch | null> {
+  const sym = encodeURIComponent(symbol)
   for (let attempt = 0; attempt < 2; attempt++) {
     const c = await ensureCrumb()
     if (!c) return null
@@ -276,9 +330,14 @@ function parseChart(json: unknown): DailyBar[] {
   return bars
 }
 
-export async function getDailyHistory(symbol: string): Promise<DailyBar[]> {
-  const sym = encodeURIComponent(symbol.trim().toUpperCase())
-  if (!sym) return []
+export function getDailyHistory(symbol: string): Promise<DailyBar[]> {
+  const sym = symbol.trim().toUpperCase()
+  if (!sym) return Promise.resolve([])
+  return cached(historyCache, sym, (v) => v.length === 0, () => fetchDailyHistory(sym))
+}
+
+async function fetchDailyHistory(symbol: string): Promise<DailyBar[]> {
+  const sym = encodeURIComponent(symbol)
   const now = Math.floor(Date.now() / 1000)
   const r = await fetchText(`${CHART_URL}/${sym}?period1=0&period2=${now}&interval=1d`)
   if (!r || !r.ok) {
@@ -341,31 +400,18 @@ export async function getIntradayHistory(
   }
 }
 
+// Key Stats fundamentals are a strict subset of the research bundle — derive
+// them from the (cached) bundle instead of a second quoteSummary variant, so a
+// dashboard open shares one fetch across fundamentals/scorecards/valuation.
 export async function getFundamentals(symbol: string): Promise<Fundamentals | null> {
-  const sym = encodeURIComponent(symbol.trim().toUpperCase())
-  // Try twice: a cached crumb may have expired, in which case we reset and retry.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const c = await ensureCrumb()
-    if (!c) return null
-    const url = `${SUMMARY_URL}/${sym}?modules=${MODULES}&crumb=${encodeURIComponent(c)}`
-    const r = await fetchText(url)
-    if (!r) return null
-    if (r.status === 401 || r.status === 403) {
-      crumb = null // stale crumb — refresh and retry
-      continue
-    }
-    if (!r.ok) {
-      console.warn('[yahoo] quoteSummary status', r.status)
-      return null
-    }
-    try {
-      const f = parse(JSON.parse(r.text))
-      console.log('[yahoo] fundamentals for', sym, '->', f ? 'ok' : 'empty')
-      return f
-    } catch (e) {
-      console.warn('[yahoo] parse error:', e instanceof Error ? e.message : e)
-      return null
-    }
+  const r = await getResearchData(symbol)
+  if (!r) return null
+  return {
+    marketCap: r.marketCap,
+    trailingPE: r.trailingPE,
+    forwardPE: r.forwardPE,
+    eps: r.trailingEps,
+    dividendYield: r.dividendYield,
+    beta: r.beta
   }
-  return null
 }

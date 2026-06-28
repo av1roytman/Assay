@@ -5,6 +5,9 @@ import { startControlServer, stopControlServer } from './server/controlServer'
 import { createHomeWindow, openResearchWindow, pushPanel, openValueChainWindow, pushValueChain } from './windows'
 import { recordResearch } from './database/history'
 import { savePanel } from './database/panels'
+import { recordCall } from './database/calls'
+import { buildPeersData } from './services/peers'
+import type { RecommendationData } from '../shared/types'
 import { upsertGraph, getGraph } from './database/valueChain'
 import { getResearchData } from './services/yahooService'
 import { getSecData } from './services/secService'
@@ -26,9 +29,24 @@ if (!gotLock) {
         recordResearch(ticker)
         openResearchWindow(ticker)
       },
-      onPanel: (panel) => {
-        const savedAt = savePanel(panel)
-        return pushPanel({ ...panel, savedAt })
+      onPanel: async (panel) => {
+        let p = panel
+        // Peers pushes carry just tickers — enrich into the comparison table
+        // app-side (cached Yahoo bundle) before persisting/forwarding.
+        if (p.type === 'peers') {
+          const tickers = (p.data as { tickers?: unknown } | undefined)?.tickers
+          if (Array.isArray(tickers)) {
+            const list = tickers.filter((t): t is string => typeof t === 'string')
+            p = { ...p, data: await buildPeersData(p.ticker, list) }
+          }
+        }
+        const savedAt = savePanel(p)
+        // Recommendations also append to the track record ("audit the analyst").
+        if (p.type === 'recommendation') {
+          const d = p.data as RecommendationData | undefined
+          if (d?.call) recordCall(p.ticker, d.call, d.headline, d.street?.targets?.current)
+        }
+        return pushPanel({ ...p, savedAt })
       },
       onData: async (ticker) => {
         const [yahoo, sec] = await Promise.all([getResearchData(ticker), getSecData(ticker)])

@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import type { PushPanel, VcPushPayload } from '../../shared/types'
+import { validatePanel } from './validatePanel'
 
 const PORT = 8765
 const HOST = '127.0.0.1'
@@ -17,7 +18,8 @@ const MAX_BODY = 5_000_000
 
 export interface ControlCallbacks {
   onResearch: (ticker: string) => void
-  onPanel: (panel: PushPanel) => boolean
+  // May be async: peers pushes are enriched app-side before persist/forward.
+  onPanel: (panel: PushPanel) => boolean | Promise<boolean>
   // Fetch the slim research bundle (Yahoo + SEC) for a ticker. Returns whatever
   // the data services produce; the server just serializes it back to the client.
   onData: (ticker: string) => Promise<unknown>
@@ -120,7 +122,14 @@ async function handle(req: IncomingMessage, res: ServerResponse, cb: ControlCall
       send(res, 400, { ok: false, error: 'ticker and type required' })
       return
     }
-    const delivered = cb.onPanel({ ...payload, ticker, type } as unknown as PushPanel)
+    // Reject malformed pushes here so they're never persisted or forwarded — a
+    // bad payload would otherwise crash the panel on every window reopen.
+    const invalid = validatePanel(type, payload.data, payload.markdown)
+    if (invalid) {
+      send(res, 400, { ok: false, error: invalid })
+      return
+    }
+    const delivered = await cb.onPanel({ ...payload, ticker, type } as unknown as PushPanel)
     send(res, 200, { ok: true, delivered })
     return
   }

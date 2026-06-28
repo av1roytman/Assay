@@ -1,4 +1,5 @@
 import type { Scorecards, Scorecard, ScorecardTone, Metric } from '../../shared/types'
+import { explain } from '../glossary'
 
 const DOT: Record<ScorecardTone, string> = {
   good: 'bg-emerald-400',
@@ -49,7 +50,9 @@ function Row({ m }: { m: Metric }): JSX.Element {
   const tone = VALUE_TONE[m.tone ?? 'neutral']
   return (
     <div className="flex items-baseline justify-between gap-2 text-[13px]">
-      <span className="text-zinc-500">{m.label}</span>
+      <span className="text-zinc-500" title={explain(m.label)}>
+        {m.label}
+      </span>
       <span className={`tabular-nums font-medium ${tone}`}>{m.value}</span>
     </div>
   )

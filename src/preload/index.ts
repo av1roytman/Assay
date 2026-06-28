@@ -10,7 +10,9 @@ import type {
   HistoryEntry,
   PushPanel,
   SurfaceInit,
-  VcGraph
+  VcGraph,
+  TrackRecordEntry,
+  CalendarData
 } from '../shared/types'
 
 const api: AssayApi = {
@@ -27,6 +29,10 @@ const api: AssayApi = {
   getValuation: (symbol: string): Promise<ValuationData | null> =>
     ipcRenderer.invoke('stocks:valuation', symbol),
   getHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke('history:list'),
+  openResearch: (symbol: string): Promise<void> => ipcRenderer.invoke('research:open', symbol),
+  getTrackRecord: (): Promise<TrackRecordEntry[]> => ipcRenderer.invoke('track:list'),
+  getCalendar: (symbol: string): Promise<CalendarData | null> =>
+    ipcRenderer.invoke('stocks:calendar', symbol),
   getPanels: (symbol: string): Promise<PushPanel[]> => ipcRenderer.invoke('panels:get', symbol),
   onInit: (cb: (init: SurfaceInit) => void): (() => void) => {
     const handler = (_e: IpcRendererEvent, init: SurfaceInit): void => cb(init)

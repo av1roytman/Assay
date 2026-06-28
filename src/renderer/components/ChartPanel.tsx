@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createChart,
   ColorType,
+  LineStyle,
   type IChartApi,
   type ISeriesApi,
+  type LogicalRange,
   type MouseEventParams,
   type UTCTimestamp
 } from 'lightweight-charts'
@@ -50,16 +52,19 @@ const DOWN = '#f87171'
 const MA50 = '#60a5fa'
 const MA200 = '#f59e0b'
 const VOL = '#3f3f4688'
+const RSI_COLOR = '#a78bfa'
 
 interface Series {
   candles: ISeriesApi<'Candlestick'>
   ma50: ISeriesApi<'Line'>
   ma200: ISeriesApi<'Line'>
   vol: ISeriesApi<'Histogram'>
+  rsi: ISeriesApi<'Line'> | null
 }
 
 export function ChartPanel({ bars, symbol }: { bars: DailyBar[]; symbol: string }): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
+  const rsiRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<Series | null>(null)
   const viewKeyRef = useRef<string | null>(null)
@@ -105,7 +110,63 @@ export function ChartPanel({ bars, symbol }: { bars: DailyBar[]; symbol: string 
       })
     const vol = chart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: '' })
     vol.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } })
-    seriesRef.current = { candles, ma50: mkMa(MA50), ma200: mkMa(MA200), vol }
+    // RSI(14) lives in its own time-synced sub-pane below the main chart — a
+    // proper indicator pane (own 0–100 axis, labeled 30/70 guides), since
+    // lightweight-charts v4 has no native panes.
+    const rsiEl = rsiRef.current
+    let rsiChart: IChartApi | null = null
+    let rsiSeries: ISeriesApi<'Line'> | null = null
+    let unsync: (() => void) | null = null
+    if (rsiEl) {
+      rsiChart = createChart(rsiEl, {
+        autoSize: true,
+        layout: {
+          background: { type: ColorType.Solid, color: '#09090b' },
+          textColor: '#a1a1aa',
+          attributionLogo: false
+        },
+        grid: { vertLines: { color: '#1f1f23' }, horzLines: { color: '#1f1f23' } },
+        rightPriceScale: { borderColor: '#3f3f46' },
+        timeScale: { visible: false, borderColor: '#3f3f46' },
+        crosshair: { mode: 0 }
+      })
+      rsiSeries = rsiChart.addLineSeries({
+        color: RSI_COLOR,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        // Pin the pane to the full 0–100 RSI scale instead of autoscaling.
+        autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } })
+      })
+      const guide = (price: number): void => {
+        rsiSeries!.createPriceLine({
+          price,
+          color: '#52525b',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: ''
+        })
+      }
+      guide(70)
+      guide(30)
+      // Lock the two time scales together (both directions).
+      const main = chart.timeScale()
+      const sub = rsiChart.timeScale()
+      const onMain = (r: LogicalRange | null): void => {
+        if (r) sub.setVisibleLogicalRange(r)
+      }
+      const onSub = (r: LogicalRange | null): void => {
+        if (r) main.setVisibleLogicalRange(r)
+      }
+      main.subscribeVisibleLogicalRangeChange(onMain)
+      sub.subscribeVisibleLogicalRangeChange(onSub)
+      unsync = () => {
+        main.unsubscribeVisibleLogicalRangeChange(onMain)
+        sub.unsubscribeVisibleLogicalRangeChange(onSub)
+      }
+    }
+    seriesRef.current = { candles, ma50: mkMa(MA50), ma200: mkMa(MA200), vol, rsi: rsiSeries }
     viewKeyRef.current = null
 
     const onMove = (param: MouseEventParams): void => {
@@ -132,6 +193,8 @@ export function ChartPanel({ bars, symbol }: { bars: DailyBar[]; symbol: string 
 
     return () => {
       chart.unsubscribeCrosshairMove(onMove)
+      unsync?.()
+      rsiChart?.remove()
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
@@ -323,7 +386,23 @@ export function ChartPanel({ bars, symbol }: { bars: DailyBar[]; symbol: string 
           </>
         )}
       </div>
-      <div ref={containerRef} className="min-h-[240px] w-full flex-1" />
+      <div ref={containerRef} className="min-h-[400px] w-full flex-1" />
+      <div className={spec.intraday ? 'hidden' : 'mt-2'}>
+        <div className="mb-1 flex items-center justify-between text-[10px] font-medium text-zinc-400">
+          <span
+            className="flex items-center gap-1.5"
+            title="Relative strength index (0–100) — momentum; above 70 often read as overbought, below 30 oversold"
+          >
+            <span
+              className="inline-block h-[2px] w-3.5 rounded"
+              style={{ backgroundColor: RSI_COLOR }}
+            />
+            RSI 14
+          </span>
+          <span className="text-zinc-500">70 = overbought · 30 = oversold</span>
+        </div>
+        <div ref={rsiRef} className="h-[100px] w-full" />
+      </div>
     </div>
   )
 }
@@ -338,6 +417,17 @@ function renderDaily(s: Series, bars: DailyBar[], gran: Gran): void {
   const times = new Set(disp.map((b) => b.time))
   s.ma50.setData(sma(bars, 50).filter((p) => times.has(p.time)))
   s.ma200.setData(sma(bars, 200).filter((p) => times.has(p.time)))
+  // RSI computed on daily closes, sampled at displayed dates. Whitespace pads
+  // the warm-up bars so both panes keep identical logical indices (time sync).
+  if (s.rsi) {
+    const byTime = new Map(rsi14(bars).map((p) => [p.time, p.value]))
+    s.rsi.setData(
+      disp.map((b) => {
+        const v = byTime.get(b.time)
+        return v != null ? { time: b.time, value: v } : { time: b.time }
+      })
+    )
+  }
 }
 
 function renderIntraday(s: Series, data: IntradayBar[]): void {
@@ -351,9 +441,10 @@ function renderIntraday(s: Series, data: IntradayBar[]): void {
     }))
   )
   s.vol.setData(data.map((b) => ({ time: localTs(b.time), value: b.volume, color: VOL })))
-  // Day-based MAs don't apply intraday — clear them.
+  // Day-based MAs/RSI don't apply intraday — clear them.
   s.ma50.setData([])
   s.ma200.setData([])
+  s.rsi?.setData([])
 }
 
 // Shift a UTC timestamp so lightweight-charts (which renders times in UTC) shows
@@ -445,6 +536,33 @@ function fmtIntradayStamp(shiftedSec: number): string {
 
 function money(n: number): string {
   return `$${n.toFixed(2)}`
+}
+
+// Wilder-smoothed RSI(14) on daily closes.
+function rsi14(bars: DailyBar[], period = 14): { time: string; value: number }[] {
+  if (bars.length <= period) return []
+  const out: { time: string; value: number }[] = []
+  let avgGain = 0
+  let avgLoss = 0
+  for (let i = 1; i <= period; i++) {
+    const ch = bars[i].close - bars[i - 1].close
+    if (ch >= 0) avgGain += ch
+    else avgLoss -= ch
+  }
+  avgGain /= period
+  avgLoss /= period
+  const point = (i: number): { time: string; value: number } => ({
+    time: bars[i].time,
+    value: avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss)
+  })
+  out.push(point(period))
+  for (let i = period + 1; i < bars.length; i++) {
+    const ch = bars[i].close - bars[i - 1].close
+    avgGain = (avgGain * (period - 1) + Math.max(ch, 0)) / period
+    avgLoss = (avgLoss * (period - 1) + Math.max(-ch, 0)) / period
+    out.push(point(i))
+  }
+  return out
 }
 
 function sma(bars: DailyBar[], period: number): { time: string; value: number }[] {

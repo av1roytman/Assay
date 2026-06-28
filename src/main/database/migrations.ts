@@ -91,4 +91,22 @@ export const migrations: Migration[] = [
       `)
     }
   }
+  ,{
+    version: 5,
+    name: 'recommendation-calls',
+    up: (db) => {
+      // Append-only log of recommendation calls (Home track record).
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS calls (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          symbol TEXT NOT NULL,
+          call TEXT NOT NULL,
+          headline TEXT,
+          price_at_call REAL,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_calls_symbol ON calls(symbol);
+      `)
+    }
+  }
 ]

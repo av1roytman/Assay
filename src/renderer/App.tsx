@@ -19,12 +19,18 @@ import type {
   Fundamentals,
   Scorecards,
   ValuationData,
-  SurfaceInit
+  SurfaceInit,
+  TrackRecordEntry,
+  CalendarData,
+  PeersData,
+  PeerRow
 } from '../shared/types'
 import { ChartPanel } from './components/ChartPanel'
+import { PanelBoundary } from './components/PanelBoundary'
 import { ScorecardGrid } from './components/ScorecardPanel'
 import { ValuationPanel } from './components/ValuationPanel'
 import { ValueChainView } from './components/ValueChainView'
+import { explain } from './glossary'
 
 export default function App(): JSX.Element {
   const [init, setInit] = useState<SurfaceInit | null>(null)
@@ -58,19 +64,22 @@ function Home(): JSX.Element {
           <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Recent</h2>
           <ul className="mt-3 divide-y divide-zinc-800 rounded-lg border border-zinc-800">
             {history.map((h) => (
-              <li
-                key={h.symbol}
-                className="flex items-center justify-between px-4 py-2.5 text-sm"
-              >
-                <span className="font-medium">{h.symbol}</span>
-                <span className="text-zinc-500">
-                  {new Date(h.lastResearchedAt).toLocaleDateString()} · {h.count}×
-                </span>
+              <li key={h.symbol}>
+                <button
+                  onClick={() => void window.api.openResearch(h.symbol)}
+                  className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-zinc-800/50"
+                >
+                  <span className="font-medium">{h.symbol}</span>
+                  <span className="text-zinc-500">
+                    {new Date(h.lastResearchedAt).toLocaleDateString()} · {h.count}×
+                  </span>
+                </button>
               </li>
             ))}
           </ul>
         </div>
       )}
+      <TrackRecord />
     </div>
   )
 }
@@ -82,6 +91,7 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
   const [fundamentals, setFundamentals] = useState<Fundamentals | null | undefined>(undefined)
   const [scorecards, setScorecards] = useState<Scorecards | null | undefined>(undefined)
   const [valuation, setValuation] = useState<ValuationData | null | undefined>(undefined)
+  const [calendar, setCalendar] = useState<CalendarData | null | undefined>(undefined)
 
   useEffect(() => {
     void window.api.getQuote(ticker).then(setQuote)
@@ -101,6 +111,11 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
       .getValuation(ticker)
       .then(setValuation)
       .catch(() => setValuation(null))
+    setCalendar(undefined)
+    void window.api
+      .getCalendar(ticker)
+      .then(setCalendar)
+      .catch(() => setCalendar(null))
   }, [ticker])
 
   // Seed from any persisted panels (the last dossier) so the window isn't blank
@@ -129,7 +144,7 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
     <div className="flex h-full flex-col">
       <Header ticker={ticker} quote={quote} />
       <div className="grid flex-1 auto-rows-min gap-4 overflow-auto p-4 lg:grid-cols-2">
-        <Panel title="Price" className="flex flex-col">
+        <Panel title="Price" className="flex flex-col lg:col-span-2">
           {bars === null ? (
             <Loading />
           ) : bars.length === 0 ? (
@@ -159,10 +174,14 @@ function Dashboard({ ticker }: { ticker: string }): JSX.Element {
             <ValuationPanel data={valuation} />
           )}
         </Panel>
+        <Panel title="Upcoming dates">
+          {calendar === undefined ? <Loading /> : <UpcomingDates data={calendar} />}
+        </Panel>
         <RecommendationCard panel={panels['recommendation']} />
         <SecSummaryCard panel={panels['sec-summary']} />
         <NewsCard panel={panels['news']} />
         <RisksCard panel={panels['risks']} />
+        <PeersCard panel={panels['peers']} />
       </div>
     </div>
   )
@@ -205,11 +224,15 @@ function Panel({
   title,
   meta,
   className,
+  resetKey,
   children
 }: {
   title: string
   meta?: ReactNode
   className?: string
+  // Forwarded to the error boundary — pass the panel's savedAt so a fresh push
+  // clears a previous render failure.
+  resetKey?: unknown
   children: ReactNode
 }): JSX.Element {
   return (
@@ -220,7 +243,7 @@ function Panel({
         <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500">{title}</h2>
         {meta && <span className="shrink-0 text-[10px] tabular-nums text-zinc-600">{meta}</span>}
       </div>
-      {children}
+      <PanelBoundary resetKey={resetKey}>{children}</PanelBoundary>
     </section>
   )
 }
@@ -239,6 +262,7 @@ function RecommendationCard({ panel }: { panel: PushPanel | undefined }): JSX.El
     <Panel
       title={panel?.title ?? 'Recommendation'}
       meta={panel?.savedAt ? `researched ${fmtStamp(panel.savedAt)}` : undefined}
+      resetKey={panel?.savedAt}
     >
       {data ? <Recommendation data={data} /> : <Loading label="Waiting for Claude…" />}
     </Panel>
@@ -366,6 +390,7 @@ function SecSummaryCard({ panel }: { panel: PushPanel | undefined }): JSX.Elemen
     <Panel
       title={panel?.title ?? 'SEC Filing Summary'}
       meta={panel?.savedAt ? `researched ${fmtStamp(panel.savedAt)}` : undefined}
+      resetKey={panel?.savedAt}
     >
       {data ? <SecSummary data={data} /> : <Loading label="Waiting for Claude…" />}
     </Panel>
@@ -431,6 +456,7 @@ function NewsCard({ panel }: { panel: PushPanel | undefined }): JSX.Element {
     <Panel
       title={panel?.title ?? 'News & catalysts'}
       meta={panel?.savedAt ? `researched ${fmtStamp(panel.savedAt)}` : undefined}
+      resetKey={panel?.savedAt}
     >
       {data ? <News data={data} /> : <Loading label="Waiting for Claude…" />}
     </Panel>
@@ -528,6 +554,7 @@ function RisksCard({ panel }: { panel: PushPanel | undefined }): JSX.Element {
     <Panel
       title={panel?.title ?? 'Risks & red flags'}
       meta={panel?.savedAt ? `researched ${fmtStamp(panel.savedAt)}` : undefined}
+      resetKey={panel?.savedAt}
     >
       {data ? <Risks data={data} /> : <Loading label="Waiting for Claude…" />}
     </Panel>
@@ -621,10 +648,241 @@ function MetricCell({ m, featured = false }: { m: Metric; featured?: boolean }):
   return (
     <div
       className={`rounded-md px-3 py-2 ${featured ? 'bg-zinc-800/70 ring-1 ring-zinc-700' : 'bg-zinc-800/40'}`}
+      title={explain(m.label)}
     >
       <div className="text-[11px] text-zinc-500">{m.label}</div>
       <div className={`text-base font-medium tabular-nums ${tone}`}>{m.value}</div>
       {m.sub && <div className="text-[11px] text-zinc-500">{m.sub}</div>}
+    </div>
+  )
+}
+
+// ── Track record (Home) ─────────────────────────────────────────────────────
+
+function TrackRecord(): JSX.Element | null {
+  const [entries, setEntries] = useState<TrackRecordEntry[]>([])
+  useEffect(() => {
+    void window.api.getTrackRecord().then(setEntries)
+  }, [])
+  if (entries.length === 0) return null
+  return (
+    <div className="mt-10">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Track record</h2>
+      <ul className="mt-3 divide-y divide-zinc-800 rounded-lg border border-zinc-800">
+        {entries.map((e, i) => {
+          const style = CALL_STYLES[e.call] ?? CALL_STYLES.hold
+          return (
+            <li key={i}>
+              <button
+                onClick={() => void window.api.openResearch(e.symbol)}
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-zinc-800/50"
+              >
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide ring-1 ${style.cls}`}
+                >
+                  {style.label}
+                </span>
+                <span className="font-medium">{e.symbol}</span>
+                {e.priceAtCall != null && (
+                  <span className="tabular-nums text-zinc-500">@ {fmtUsd(e.priceAtCall)}</span>
+                )}
+                <span className="text-zinc-600">{new Date(e.at).toLocaleDateString()}</span>
+                {e.returnPct != null && (
+                  <span
+                    className={`ml-auto font-medium tabular-nums ${
+                      e.returnPct >= 0 ? 'text-emerald-300' : 'text-red-300'
+                    }`}
+                  >
+                    {pctStr(e.returnPct)} since
+                  </span>
+                )}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+// ── Upcoming dates ──────────────────────────────────────────────────────────
+
+interface DatedEvent {
+  label: string
+  sub: string // one-line "what this means"
+  date: string // ISO start
+  end?: string // ISO end (earnings estimate window)
+}
+
+function UpcomingDates({ data }: { data: CalendarData | null }): JSX.Element {
+  const events: DatedEvent[] = []
+  if (data?.earningsDates && data.earningsDates.length > 0) {
+    events.push({
+      label: 'Earnings',
+      sub: 'Next quarterly results',
+      date: data.earningsDates[0],
+      end: data.earningsDates.length > 1 ? data.earningsDates[data.earningsDates.length - 1] : undefined
+    })
+  }
+  if (data?.exDividendDate)
+    events.push({
+      label: 'Ex-dividend',
+      sub: 'Own it before this date to get the payout',
+      date: data.exDividendDate
+    })
+  if (data?.dividendDate)
+    events.push({ label: 'Dividend paid', sub: 'Payout hits accounts', date: data.dividendDate })
+  events.sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
+  if (events.length === 0) return <Empty msg="No upcoming dated events" />
+
+  // Highlight the first event that hasn't passed yet.
+  const DAY = 86_400_000
+  const now = Date.now()
+  const nextIdx = events.findIndex((e) => Date.parse(e.end ?? e.date) + DAY >= now)
+
+  return (
+    <div className="space-y-2">
+      {events.map((e, i) => {
+        const isNext = i === nextIdx
+        return (
+          <div
+            key={e.label}
+            className={`flex items-center justify-between gap-3 rounded-md px-3 py-2.5 ${
+              isNext ? 'bg-zinc-800/70 ring-1 ring-emerald-500/25' : 'bg-zinc-800/40'
+            }`}
+          >
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                  {e.label}
+                </span>
+                {isNext && (
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
+                    next up
+                  </span>
+                )}
+              </div>
+              <div className="text-sm font-medium tabular-nums text-zinc-100">
+                {fmtIsoDate(e.date)}
+                {e.end && <span className="text-zinc-400"> – {fmtIsoDate(e.end)}</span>}
+              </div>
+              <div className="truncate text-[11px] text-zinc-500">{e.sub}</div>
+            </div>
+            <CountdownPill date={e.date} end={e.end} />
+          </div>
+        )
+      })}
+      <div className="pt-0.5 text-[11px] text-zinc-600">
+        Yahoo calendar — dates can shift until confirmed.
+      </div>
+    </div>
+  )
+}
+
+// "in 12d" / "today" / "8d ago" pill; emerald when imminent (≤7 days out).
+function CountdownPill({ date, end }: { date: string; end?: string }): JSX.Element | null {
+  const DAY = 86_400_000
+  const start = Date.parse(date)
+  if (Number.isNaN(start)) return null
+  const through = Date.parse(end ?? date) + DAY // event day runs through midnight
+  const now = Date.now()
+  let label: string
+  let cls: string
+  if (through < now) {
+    label = `${Math.max(1, Math.round((now - through) / DAY))}d ago`
+    cls = 'bg-zinc-800 text-zinc-500'
+  } else if (start <= now) {
+    label = end ? 'this window' : 'today'
+    cls = 'bg-emerald-500/15 text-emerald-300'
+  } else {
+    const days = Math.ceil((start - now) / DAY)
+    label = days === 1 ? 'tomorrow' : `in ${days}d`
+    cls = days <= 7 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-800 text-zinc-300'
+  }
+  return (
+    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium tabular-nums ${cls}`}>
+      {label}
+    </span>
+  )
+}
+
+function fmtIsoDate(iso: string): string {
+  const t = Date.parse(iso)
+  if (Number.isNaN(t)) return iso
+  return new Date(t).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  })
+}
+
+// ── Peer comparison ─────────────────────────────────────────────────────────
+
+function PeersCard({ panel }: { panel: PushPanel | undefined }): JSX.Element {
+  const data = panel?.data as PeersData | undefined
+  return (
+    <Panel
+      title={panel?.title ?? 'Peer comparison'}
+      meta={panel?.savedAt ? `researched ${fmtStamp(panel.savedAt)}` : undefined}
+      resetKey={panel?.savedAt}
+      className="lg:col-span-2"
+    >
+      {data?.rows ? <Peers data={data} /> : <Loading label="Waiting for Claude…" />}
+    </Panel>
+  )
+}
+
+interface PeerCol {
+  key: keyof PeerRow
+  label: string
+  fmt: (v: number) => string
+}
+
+const PEER_COLS: PeerCol[] = [
+  { key: 'marketCap', label: 'Mkt cap', fmt: fmtBig },
+  { key: 'forwardPE', label: 'Fwd P/E', fmt: (v) => v.toFixed(1) },
+  { key: 'priceToSales', label: 'P/S', fmt: (v) => v.toFixed(1) },
+  { key: 'revenueGrowth', label: 'Rev growth', fmt: (v) => pctStr(v * 100) },
+  { key: 'operatingMargins', label: 'Op margin', fmt: (v) => (v * 100).toFixed(1) + '%' },
+  { key: 'fcfYield', label: 'FCF yield', fmt: (v) => (v * 100).toFixed(1) + '%' },
+  { key: 'dividendYield', label: 'Div yield', fmt: (v) => v.toFixed(2) + '%' },
+  { key: 'beta', label: 'Beta', fmt: (v) => v.toFixed(2) }
+]
+
+function Peers({ data }: { data: PeersData }): JSX.Element {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[13px]">
+        <thead>
+          <tr className="text-left text-[10px] uppercase tracking-wide text-zinc-500">
+            <th className="py-1.5 pr-3 font-medium">Ticker</th>
+            {PEER_COLS.map((c) => (
+              <th key={c.key} className="py-1.5 pr-3 text-right font-medium" title={explain(c.label)}>
+                {c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-zinc-800/60">
+          {data.rows.map((r, i) => (
+            <tr key={r.symbol} className={i === 0 ? 'bg-zinc-800/30' : undefined}>
+              <td className="py-1.5 pr-3 font-medium text-zinc-200">
+                {r.symbol}
+                {i === 0 && <span className="text-zinc-500"> ★</span>}
+              </td>
+              {PEER_COLS.map((c) => {
+                const v = r[c.key]
+                return (
+                  <td key={c.key} className="py-1.5 pr-3 text-right tabular-nums text-zinc-300">
+                    {typeof v === 'number' ? c.fmt(v) : '—'}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {data.note && <div className="mt-2 text-[11px] text-zinc-500">{data.note}</div>}
     </div>
   )
 }
