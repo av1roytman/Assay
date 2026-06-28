@@ -17,7 +17,7 @@
     "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.7.2",
+    "@electron/rebuild": "^4.0.6",
     "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3-node": "npm:better-sqlite3@^12.9.0",
     "@types/d3-force": "^3.0.10",
