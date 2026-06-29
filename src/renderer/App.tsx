@@ -23,7 +23,8 @@ import type {
   TrackRecordEntry,
   CalendarData,
   PeersData,
-  PeerRow
+  PeerRow,
+  ConsistencyCheck
 } from '../shared/types'
 import { ChartPanel } from './components/ChartPanel'
 import { PanelBoundary } from './components/PanelBoundary'
@@ -335,7 +336,77 @@ function Recommendation({ data }: { data: RecommendationData }): JSX.Element {
         </div>
       </div>
 
+      {(() => {
+        const hasBull = !!data.bull?.length
+        const hasBear = !!data.bear?.length
+        if (!hasBull && !hasBear) return null
+        return (
+          <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+            {hasBull && (
+              <div>
+                <SubHead>Bull case</SubHead>
+                <ul className="space-y-1 text-[13px] text-zinc-400">
+                  {data.bull!.map((p, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="shrink-0 text-emerald-400">▲</span>
+                      <span>{p}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {hasBear && (
+              <div>
+                <SubHead>Bear case</SubHead>
+                <ul className="space-y-1 text-[13px] text-zinc-400">
+                  {data.bear!.map((p, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="shrink-0 text-red-400">▼</span>
+                      <span>{p}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {data.consistency && <Consistency check={data.consistency} />}
+
       {data.asOf && <div className="mt-4 text-[11px] text-zinc-600">{data.asOf}</div>}
+    </div>
+  )
+}
+
+const CONSISTENCY_STYLES: Record<ConsistencyCheck['verdict'], { label: string; cls: string }> = {
+  aligned: { label: 'Aligned', cls: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30' },
+  mixed: { label: 'Mixed', cls: 'bg-amber-500/15 text-amber-300 ring-amber-500/30' },
+  conflicted: { label: 'Conflicted', cls: 'bg-red-500/15 text-red-300 ring-red-500/30' }
+}
+
+function Consistency({ check }: { check: ConsistencyCheck }): JSX.Element {
+  const style = CONSISTENCY_STYLES[check.verdict]
+  return (
+    <div className="mt-5">
+      <div className="flex items-center gap-2">
+        <SubHead>Consistency</SubHead>
+        <span
+          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${style.cls}`}
+        >
+          {style.label}
+        </span>
+      </div>
+      {check.conflicts.length > 0 && (
+        <ul className="mt-1 space-y-1 text-[12px]">
+          {check.conflicts.map((c, i) => (
+            <li key={i} className={c.severity === 'conflict' ? 'text-red-300' : 'text-amber-300/80'}>
+              <span className="text-zinc-500">{c.severity === 'conflict' ? '✕ ' : '≈ '}</span>
+              {c.message}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

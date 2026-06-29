@@ -82,6 +82,9 @@ export interface RecommendationData {
   thesis: string // short paragraph: the reasoning behind your call
   buyIf?: string // what would flip you to buy
   avoidIf?: string // what would flip you to avoid
+  bull?: string[] // concise bull-case points (Claude-pushed; plain strings)
+  bear?: string[] // concise bear-case points (Claude-pushed; plain strings)
+  consistency?: ConsistencyCheck // app-filled ONLY — Claude never sends it
   street: {
     rating?: string // "Buy", "Moderate Buy", …
     score?: number // 1 (strong buy) … 5 (sell)
@@ -90,6 +93,21 @@ export interface RecommendationData {
     notable?: AnalystNote[] // recent / notable individual calls
   }
   asOf?: string
+}
+
+// App-side reconciliation between Claude's `call` and the app's own hard numbers
+// (DCF, scorecards, analyst consensus). `divergence` is informational (street
+// disagreement may be the user's contrarian edge); `conflict` is a genuine
+// internal inconsistency with the app's own math.
+export interface ConsistencyConflict {
+  kind: 'dcf' | 'value' | 'street'
+  severity: 'conflict' | 'divergence'
+  message: string // plain string, no markdown
+}
+
+export interface ConsistencyCheck {
+  verdict: 'aligned' | 'mixed' | 'conflicted'
+  conflicts: ConsistencyConflict[] // empty when aligned
 }
 
 export interface Metric {

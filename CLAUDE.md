@@ -135,6 +135,9 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 - [~] **"What changed since last research" diff** — ❌ dropped (2026-06-28, owner's call: not wanted). Was: on a fresh `/research`, surface flips (buy→hold), new/removed risk categories, consensus shifts since the previous dossier.
 - [ ] **Dossier export** (markdown/HTML serializer over the stored structured panels) — nice-to-have.
 
+### Conviction layer (depth/trust) — noted 2026-06-28
+- [x] **#1 Conviction verdict + reconciliation** (2026-06-28) — recommendation panel gains a Claude-pushed **bull case vs bear case** plus an **app-side deterministic reconciliation** (`reconcile.ts`, vitest-tested) that flags where Claude's `call` contradicts the app's own DCF / Value scorecard / street consensus, rendered as a consistency badge (`aligned`/`mixed`/`conflicted`) + conflict list. App-owned & deterministic — the trust mechanism. Wired in `onPanel` alongside the `street` merge; persists with the dossier. See [spec](docs/superpowers/specs/2026-06-28-conviction-verdict-reconciliation-design.md). Sub-projects #2 (positioning signals) and #3 (context) deferred.
+
 ### Out of scope (intentional)
 - [ ] Idea screening / discovery — bring-your-own-ticker
 - [ ] International stocks, crypto
