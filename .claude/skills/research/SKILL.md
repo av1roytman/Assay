@@ -132,13 +132,15 @@ After the sub-agent returns, write the recommendation **yourself** from its `dat
 - **Call + thesis:** your own buy/hold/avoid with reasoning, `buyIf`, `avoidIf`. Apply a **consistent valuation discipline across tickers** (e.g. forward P/E vs growth — the cross-ticker consistency is the main reason this lives on Opus, not the sub-agent). For non-USD filers, lean on currency-clean signals (forward P/E, margins, growth, price-vs-MA) and **ignore cross-currency ratios** like P/S.
 - **Reference the DCF when present:** the `data` bundle now carries `valuation` (an app-computed 2-stage DCF). When `valuation.applicable` is true, weave its read into your thesis — e.g. "trades ~20% below a ~$X DCF fair value (margin of safety +20%)" or "priced for demanding ~18%/yr FCF growth (reverse DCF)". Treat it as **one input among many, not a mechanical buy/sell trigger**, and respect its caveats (FCFE approximation, single TTM FCF base; unreliable for financials). When `valuation.applicable` is false, ignore it. The Valuation panel renders itself — you do **not** push it.
 - **`street` is app-filled — you don't source it.** After you push, the app overwrites `street.rating` / `score` / `analysts` / `targets` with the real Yahoo consensus from `data.analyst` (mirrors peers) and sets `targets.current` from the live quote — including thin/absent-coverage cases (`rating: "none"` falls back cleanly). You only send `call` / `headline` / `thesis` / `buyIf` / `avoidIf` and, if you have per-firm color, `street.notable`. Don't spend tool calls sourcing consensus numbers; still flag stale consensus in `asOf` when a newer event is known.
+- **Bull vs bear:** push `bull` and `bear` as short arrays of concise, single-clause points (a few each — not paragraphs), drawn from the data you already gathered. No new tool calls. These render side by side as the explicit two-sided case; keep `buyIf` / `avoidIf` as the "what would change my mind" fields.
+- **`consistency` is app-filled — never send it.** The app deterministically cross-checks your `call` against its own DCF, scorecards, and consensus and attaches a consistency badge. It is the trust mechanism; do not include a `consistency` field in your push.
 - Write the JSON to a temp file and push (then delete the temp file):
   ```
   node scripts/assay.mjs panel <TICKER> recommendation --title "Recommendation" --data <temp.json>
   ```
   Do NOT send markdown for this type. It returns `{"ok":true,"delivered":true}`.
 
-**`recommendation` JSON shape** (the app fills `street.rating` / `score` / `analysts` / `targets`; only `street.notable` is yours):
+**`recommendation` JSON shape** (the app fills `street.rating` / `score` / `analysts` / `targets` and `consistency`; only `street.notable` is yours):
 ```json
 {
   "call": "buy | hold | avoid",
@@ -146,6 +148,8 @@ After the sub-agent returns, write the recommendation **yourself** from its `dat
   "thesis": "short paragraph — the reasoning behind your call",
   "buyIf": "what would flip you to buy (optional)",
   "avoidIf": "what would flip you to avoid (optional)",
+  "bull": [ "concise bull point", "another bull point" ],
+  "bear": [ "concise bear point", "another bear point" ],
   "street": {
     "notable": [ { "firm": "Wedbush", "target": 400, "note": "AI inflection" } ]
   },
