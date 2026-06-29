@@ -7,6 +7,7 @@ import { recordResearch } from './database/history'
 import { savePanel } from './database/panels'
 import { recordCall } from './database/calls'
 import { buildPeersData } from './services/peers'
+import { mergeStreet } from './services/consensus'
 import type { RecommendationData } from '../shared/types'
 import { upsertGraph, getGraph } from './database/valueChain'
 import { getResearchData } from './services/yahooService'
@@ -38,6 +39,17 @@ if (!gotLock) {
           if (Array.isArray(tickers)) {
             const list = tickers.filter((t): t is string => typeof t === 'string')
             p = { ...p, data: await buildPeersData(p.ticker, list) }
+          }
+        }
+        // Recommendation pushes: fill the street consensus with the app's real
+        // Yahoo numbers (Claude keeps `notable`), mirroring the peers enrichment.
+        // Runs before savePanel AND before the recordCall block below, so the
+        // persisted panel and the track-record price-at-call both use real data.
+        if (p.type === 'recommendation') {
+          const d = p.data as RecommendationData | undefined
+          if (d) {
+            const r = await getResearchData(p.ticker)
+            p = { ...p, data: { ...d, street: mergeStreet(d.street, r?.analyst, r?.price) } }
           }
         }
         const savedAt = savePanel(p)
