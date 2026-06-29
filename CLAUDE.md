@@ -107,7 +107,7 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 - [x] First Claude panels wired end-to-end: **SEC summary** + **recommendation**
 - [x] Lightweight history (tickers + dates) in SQLite ([history.ts](src/main/database/history.ts), migration v2)
 - [x] **Live click-through test** — `npm run dev` + `/research AAPL` confirmed 2026-06-10: chart painted (11,465 bars), sec-summary/news/recommendation/risks all streamed in `delivered:true`
-- [ ] Earnings / notable-dates numeric panel (needs Yahoo service) — deferred to v2
+- [x] Earnings / notable-dates panel — delivered by the "Upcoming dates" panel (2026-06-10); `CalendarData` (earnings window / ex-div / dividend dates) rides the cached Yahoo research bundle ([App.tsx](src/renderer/App.tsx) `UpcomingDates`)
 
 ### v2 — fill out the panels
 - [x] Rule-scorecards panel — app-computed, **Yahoo-primary** (Value/Growth/Dividend/Technical + ETF Profile/Technical); pure `scoring.ts` engine (vitest-tested) → `scorecardService.ts` → `stocks:scorecards` IPC → `ScorecardPanel`. SEC-EDGAR source + sector-aware thresholds deferred (see [spec](docs/superpowers/specs/2026-06-03-scorecards-panel-design.md))
@@ -120,7 +120,9 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 ### v3 — the value chain + polish
 - [x] Value-chain **node graph** — standalone `/value-chain` skill + dedicated radial-graph window (React Flow + d3-force); Claude pushes entities/edges (hybrid sources + confidence), app dedups/persists (migration v4: `vc_entities`/`vc_edges`/`vc_generations`) & renders an accreting cross-company map; 30-day freshness cache. See [spec](docs/superpowers/specs/2026-06-03-value-chain-map-design.md)
 - [x] Reopen-from-history — clickable Home rows → `research:open` IPC → saved dossier reloads (reopen doesn't bump the research count) (2026-06-10)
-- [ ] Window tabs option, settings, electron-builder packaging
+- [ ] **electron-builder packaging** — optional; ship a distributable/installed app instead of `npm run dev`. Not needed for the Claude-driven local workflow, so do it only when a packaged build is wanted.
+- [ ] **Window tabs option** — deferred UX choice vs. the current new-window-per-ticker model (no functional need).
+- [~] **Settings surface** — ❌ dropped (2026-06-28): speculative; nothing needs it yet (no accounts, fixed port, thresholds in code). Revisit if a concrete setting must be exposed.
 - [x] Persist pushed panels to `assay.db` (migration v3, `panels` table; one row per ticker+type, upserted with `created_at`). Windows reload the last dossier with its date on open ([panels.ts](src/main/database/panels.ts), `getPanels` IPC); fresh pushes overwrite by `savedAt`. ("save full dossiers")
 
 ### Backlog — UX & indicators (noted 2026-06-05)
