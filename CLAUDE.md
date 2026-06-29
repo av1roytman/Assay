@@ -130,8 +130,8 @@ ETFs get a tailored card set (expense ratio, distribution yield, top holdings, s
 
 ### Backlog — close the loop (noted 2026-06-10)
 - [x] **Track record / "audit the analyst" panel** ⭐ (2026-06-10) — append-only `calls` table (migration v5) fed by every recommendation push (call + headline + price-at-call from `street.targets.current`); Home "Track record" list shows `CALL SYM @ $px · date · +X% since` (current price via Stooq, [trackRecord.ts](src/main/services/trackRecord.ts)), rows click through to the dossier.
-- [ ] **"What changed since last research" diff** — builds on version history above. On a fresh `/research`, surface flips (buy→hold), new/removed risk categories, consensus shifts since the previous dossier.
-- [ ] **Dossier export** (markdown/HTML serializer over the stored structured panels) — nice-to-have, after the two above.
+- [~] **"What changed since last research" diff** — ❌ dropped (2026-06-28, owner's call: not wanted). Was: on a fresh `/research`, surface flips (buy→hold), new/removed risk categories, consensus shifts since the previous dossier.
+- [ ] **Dossier export** (markdown/HTML serializer over the stored structured panels) — nice-to-have.
 
 ### Out of scope (intentional)
 - [ ] Idea screening / discovery — bring-your-own-ticker
