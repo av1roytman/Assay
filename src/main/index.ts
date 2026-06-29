@@ -13,6 +13,8 @@ import { upsertGraph, getGraph } from './database/valueChain'
 import { getResearchData } from './services/yahooService'
 import { getSecData } from './services/secService'
 import { computeValuation } from './services/dcf'
+import { getScorecards } from './services/scorecardService'
+import { reconcile } from './services/reconcile'
 
 // Single instance: all research windows live in one process so the control
 // server and DB are shared. A second launch just focuses the home window.
@@ -48,8 +50,17 @@ if (!gotLock) {
         if (p.type === 'recommendation') {
           const d = p.data as RecommendationData | undefined
           if (d) {
-            const r = await getResearchData(p.ticker)
-            p = { ...p, data: { ...d, street: mergeStreet(d.street, r?.analyst, r?.price) } }
+            // getResearchData + getScorecards run concurrently to avoid added
+            // latency; the DCF is pure over the Yahoo bundle. The app computes
+            // `consistency` (Claude never sends it) — the trust mechanism.
+            const [r, scorecards] = await Promise.all([
+              getResearchData(p.ticker),
+              getScorecards(p.ticker)
+            ])
+            const valuation = computeValuation(r ?? null, p.ticker, new Date().toISOString())
+            const street = mergeStreet(d.street, r?.analyst, r?.price)
+            const consistency = reconcile(d.call, scorecards, valuation, r?.analyst)
+            p = { ...p, data: { ...d, street, consistency } }
           }
         }
         const savedAt = savePanel(p)
